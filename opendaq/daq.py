@@ -1026,8 +1026,11 @@ class DAQ(threading.Thread):
             if (
                     (type(exp) is DAQStream or type(exp) is DAQBurst) and
                     exp.get_mode() == ANALOG_OUTPUT):
-                self.preload_data, self.preload_offset = exp.get_preload_data()
-                self.__load_signal()
+                pr_data, pr_offset = exp.get_preload_data()
+                for i in range(len(pr_data)):
+                    self.preload_data = pr_data[i]
+                    self.preload_offset = pr_offset[i]
+                    self.__load_signal()
                 break
 
         self.send_command('\x40\x00', '')
@@ -1289,8 +1292,9 @@ class DAQ(threading.Thread):
             offset = self.offsets[n]
             volts = ((float(raw * gain))/1e4 + offset)
             volts /= MULTIPLIER_LIST[gain_id]
+            volts /= 1000.0
 
-        return volts/1000.0
+        return volts
 
     def run(self):
         while True:

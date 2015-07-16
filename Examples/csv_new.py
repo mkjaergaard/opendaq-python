@@ -11,7 +11,7 @@ GAINx10  = 3
 GAINx100 = 4
 
 # Connect to the device
-dq = DAQ("COM9")  # change for the Serial port in which openDAQ is connected
+dq = DAQ("COM21")  # change for the Serial port in which openDAQ is connected
 period1 = 200
 numberPoints1 = 20
 numberPoints2 = 10
