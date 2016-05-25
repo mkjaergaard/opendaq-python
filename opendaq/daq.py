@@ -1,5 +1,4 @@
 # !/usr/bin/env python
-# !/usr/bin/env python
 
 # Copyright 2015
 # Ingen10 Ingenieria SL
@@ -69,7 +68,8 @@ GAIN_S_X10 = 5
 GAIN_S_X16 = 6
 GAIN_S_X20 = 7
 
-MULTIPLIER_LIST = [1, 2, 4, 5, 8, 10, 16, 20]
+BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+BASE_GAINS_S = [1./v*12./2**13 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
 
 
 class DAQ(threading.Thread):
@@ -85,12 +85,13 @@ class DAQ(threading.Thread):
         self.__stopping = False
         self.gain = 0
         self.pinput = 1
+        self.ninput = 0
         self.open()
 
         info = self.get_info()
         self.__fw_ver = info[1]
         self.__hw_ver = 'm' if info[0] == 1 else 's'
-        self.gains, self.offsets = self.get_cal()
+        self.adc_gains, self.adc_offsets = self.get_adc_cal()
         self.dac_gain, self.dac_offset = self.get_dac_cal()
 
         self.experiments = []
@@ -192,12 +193,7 @@ class DAQ(threading.Thread):
             Voltage value
         """
         value = self.send_command(mkcmd(1, ''), 'h')[0]
-        # Raw value to voltage->
-        index = self.gain + 1 if self.__hw_ver == 'm' else self.pinput
-        value *= self.gains[index]
-        value = -value/1e5 if self.__hw_ver == 'm' else value/1e4
-        value = (value + self.offsets[index])/1e3
-        return value
+        return self.__raw_to_volts(value, self.gain, self.pinput, self.ninput)
 
     def read_all(self, nsamples=20, gain=0):
         """Read data from all analog inputs
@@ -213,16 +209,9 @@ class DAQ(threading.Thread):
         """
         if self.fw_ver() < 120:
             raise Warning("Function not implemented in this FW. Try updating")
-        self.gain = gain
+
         values = self.send_command(mkcmd(4, 'BB', nsamples, gain), '8h')
-        if self.__hw_ver == 'm':
-            a = -self.gains[self.gain + 1]/1e5
-            b = self.offsets[self.gain + 1]
-            val = [(v*a+b)/1e3 for v in values]
-        else:
-            val = [(v*self.gains[i+1]/1e4+self.offsets[i+1])/1e3
-                   for i, v in enumerate(values)]
-        return val
+        return [self.__raw_to_volts(v, gain, i, 0) for i, v in enumerate(values)]
 
     def conf_adc(self, pinput=8, ninput=0, gain=0, nsamples=20):
         """
@@ -264,11 +253,8 @@ class DAQ(threading.Thread):
             raise ValueError("samples number out of range")
 
         self.gain = gain
-
-        if self.__hw_ver == 's' and ninput != 0:
-            self.pinput = (pinput - 1)/2 + 9
-        else:
-            self.pinput = pinput
+        self.pinput = pinput
+        self.ninput = ninput
 
         return self.send_command(mkcmd(2, 'BBBB', pinput,
                                        ninput, gain, nsamples), 'hBBBB')
@@ -299,6 +285,29 @@ class DAQ(threading.Thread):
             raise ValueError('Invalid color number')
 
         return self.send_command(mkcmd(18, 'B', color), 'B')[0]
+
+    def __raw_to_volts(self, raw, gain_id, pinput, ninput=0):
+        """Convert a raw value to a value in volts.
+
+        Args:
+            raw: Value to convert to volts
+            gain_id: ID of the analog configuration setup
+        """
+
+        if self.__hw_ver == 'm':
+            base_gain = BASE_GAINS_M[gain_id]
+            gain = self.adc_gains[gain_id]
+            offset = self.adc_offsets[gain_id]
+            print base_gain, gain, offset, raw
+        elif self.__hw_ver == 's':
+            n = pinput
+            if ninput != 0:
+                n += 8
+            base_gain = BASE_GAINS_S[gain_id]
+            gain = self.adc_gains[n]
+            offset = self.adc_offsets[n]
+
+        return (raw - offset)*base_gain*gain
 
     def __volts_to_raw(self, volts):
         """Convert a value in volts to a raw value.
@@ -567,11 +576,22 @@ class DAQ(threading.Thread):
                 self.__hw_ver == 's' and not 0 <= gain_id <= 16):
                     raise ValueError("gain_id out of range")
 
-        return self.send_command(mkcmd(36, 'B', gain_id), 'BHh')
+        return self.send_command(mkcmd(36, 'B', gain_id), 'Bhh')
 
-    def get_cal(self):
+    def get_dac_cal(self):
         """
-        Read device calibration
+        Read DAC calibration
+
+        Returns:
+            Gain
+            Offset
+        """
+        _, corr, offset = self.__get_calibration(0)
+        return 1. + corr/1e5, offset
+
+    def get_adc_cal(self):
+        """
+        Read ADC calibration
 
         Gets calibration values for all the available device configurations
 
@@ -582,31 +602,20 @@ class DAQ(threading.Thread):
         gains = []
         offsets = []
         _range = 6 if self.__hw_ver == "m" else 17
-        for i in range(_range):
-            gain_id, gain, offset = self.__get_calibration(i)
-            gains.append(gain)
+        for i in range(1, _range):
+            _, corr, offset = self.__get_calibration(i)
+            gains.append(1. + corr/1e5)
             offsets.append(offset)
         return gains, offsets
 
-    def get_dac_cal(self):
-        """
-        Read DAC calibration
-
-        Returns:
-            DAC gain
-            DAC offset
-        """
-        gain_id, gain, offset = self.__get_calibration(0)
-        return gain, offset
-
-    def __set_calibration(self, gain_id, gain, offset):
+    def __set_calibration(self, gain_id, corr, offset):
         """
         Set device calibration
 
         Args:
             gain_id: ID of the analog configuration setup
-            gain: Gain multiplied by 100000 ([M]) or 10000 ([S])
-            offset: Offset raw value (-32768 to 32768)
+            corr: Gain correction: G = Gbase*(1 + corr/100000)
+            offset: Offset raw value (-32768 to 32767)
         Raises:
             ValueError: Values out of range
         """
@@ -614,98 +623,63 @@ class DAQ(threading.Thread):
                 self.__hw_ver == 's' and not 0 <= gain_id <= 16):
                     raise ValueError("gain_id out of range")
 
-        if not 0 <= gain < 65536:
-            raise ValueError("gain out of range")
+        if not -2**15 <= corr < (2**15-1):
+            raise ValueError("correction out of range")
 
-        if not -32768 <= offset < 32768:
+        if not -2**15 <= offset < (2**15-1):
             raise ValueError("offset out of range")
 
-        return self.send_command(mkcmd(37, 'BHh', gain_id,
-                                       gain, offset), 'BHh')
+        return self.send_command(mkcmd(37, 'Bhh', gain_id,
+                                       corr, offset), 'Bhh')
 
-    def set_cal(self, gains, offsets, flag):
+    def set_adc_cal(self, corrs, offsets, flag):
         """
         Set device calibration
 
         Args:
-            gains: Gain multiplied by 100000 ([M]) or 10000 ([S])
-            offsets: Offset raw value (-32768 to 32768)
+            corrs: Gain correction: G = Gbase*(1 + corr/100000)
+            offsets: Offset raw value (-32768 to 32767)
             flag: 'M', 'SE' or 'DE'
         Raises:
             ValueError: Values out of range
         """
-        for gain in gains:
-            if not 0 <= gain < 65536:
-                raise ValueError("gain out of range")
+        for corr in corrs:
+            if not -2**15 <= corr < (2**15-1):
+                raise ValueError("correction out of range")
 
         for offset in offsets:
-            if not -32768 <= offset < 32768:
+            if not -2**15 <= offset < (2**15-1):
                 raise ValueError("offset out of range")
 
         if flag == 'M':
             for i in range(1, 6):
-                self.__set_calibration(i, gains[i-1], offsets[i-1])
+                self.__set_calibration(i, corrs[i-1], offsets[i-1])
         elif flag == 'SE':
             for i in range(1, 9):
-                self.__set_calibration(i, gains[i-1], offsets[i-1])
+                self.__set_calibration(i, corrs[i-1], offsets[i-1])
         elif flag == 'DE':
             for i in range(9, 17):
-                self.__set_calibration(i, gains[i-9], offsets[i-9])
+                self.__set_calibration(i, corrs[i-9], offsets[i-9])
         else:
             raise ValueError("Invalid flag")
 
-    def set_dac_cal(self, gain, offset):
+    def set_dac_cal(self, corr, offset):
         """
         Set DAC calibration
 
         Args:
-            gain: Gain multiplied by 100000 ([M]) or 10000 ([S])
+            corr: Gain multiplied by 100000 ([M]) or 10000 ([S])
             ofset: Offset raw value (-32768 to 32678)
         Raises:
             ValueError: Values out of range
         """
-        if not 0 <= gain < 65536:
-            raise ValueError("gain out of range")
+        if not 0 <= corr < 65536:
+            raise ValueError("correction out of range")
 
         if not -32768 <= offset < 32768:
             raise ValueError("offset out of range")
 
-        self.__set_calibration(0, gain, offset)
-
-    def __raw_to_volts(self, raw, experiment):
-        """Convert a raw value to a value in volts.
-
-        Args:
-            raw: Value to convert to volts
-            experiment: DataChannel number of this experiment
-        """
-        if not 0 <= experiment <= 3:
-            raise ValueError('Invalid experiment number')
-
-        gain_id, pinput, ninput, number = (
-            self.experiments[experiment].get_parameters())
-
-        if self.__hw_ver == 'm':
-            gain = self.gains[gain_id + 1]
-            offset = self.offsets[gain_id + 1]
-
-            volts = float(raw)
-            volts *= gain
-            volts = -volts/1e5
-            volts = (volts + offset)/1e3
-
-        if self.__hw_ver == 's':
-            n = pinput
-            if ninput != 0:
-                n += 8
-
-            gain = self.gains[n]
-            offset = self.offsets[n]
-            volts = ((float(raw * gain))/1e4 + offset)
-            volts /= MULTIPLIER_LIST[gain_id]
-            volts /= 1000.0
-
-        return volts
+        self.__set_calibration(0, corr, offset)
 
     def set_id(self, id):
         """
@@ -774,31 +748,30 @@ class DAQ(threading.Thread):
 
 
     def __trigger_setup(self, number, trg_mode, trg_value):
-	"""Channge the trigger mode of the datachannel
-
+        """Channge the trigger mode of the datachannel
         Args:
             number: Number of the datachannel
             trg_mode: Trigger mode of the datachannel
-	    trg_value: Value of the trigger mode
+        trg_value: Value of the trigger mode
         Raises:
             Invalid number: Value out of range
-	    Invalid trigger mode: Value out of range
-	    Invalid trigger value: Value out of range
+        Invalid trigger mode: Value out of range
+        Invalid trigger value: Value out of range
         """
 
-	if not 1 <= number <= 4:
-            raise ValueError('Invalid number')
+        if not 1 <= number <= 4:
+                raise ValueError('Invalid number')
 
-	if type(trg_mode) == int and not 0 <= trg_mode <= 6 and not trg_mode == 10 and not trg_mode == 20:
-            raise ValueError('Invalid trigger mode')
+        if type(trg_mode) == int and not 0 <= trg_mode <= 6 and not trg_mode == 10 and not trg_mode == 20:
+                raise ValueError('Invalid trigger mode')
 
-	if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
-	    raise ValueError('Invalid value of digital trigger(0,1)')
+        if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
+            raise ValueError('Invalid value of digital trigger(0,1)')
 
         self.send_command(mkcmd(33, 'BBH', number, trg_mode, trg_value), 'BBH')
 
     def trigger_mode(self, number):
-	"""Get the trigger mode of the datachannel
+        """Get the trigger mode of the datachannel
 
         Args:
             number: Number of the datachannel
@@ -806,13 +779,13 @@ class DAQ(threading.Thread):
             Invalid number: Value out of range
         """
 
-	if not 1 <= number <= 4:
-            raise ValueError('Invalid number')
+        if not 1 <= number <= 4:
+                raise ValueError('Invalid number')
 
         return self.send_command(mkcmd(34, 'B', number), 'H')[0]
 
     def get_state_ch(self, number):
-	"""Get state of the datachannel
+        """Get state of the datachannel
 
         Args:
             number: Number of the datachannel
@@ -820,8 +793,8 @@ class DAQ(threading.Thread):
             Invalid number: Value out of range
         """
 
-	if not 1 <= number <= 4:
-            raise ValueError('Invalid number')
+        if not 1 <= number <= 4:
+                raise ValueError('Invalid number')
 
         return self.send_command(mkcmd(35, 'B', number), 'H')[0]
 
@@ -970,7 +943,7 @@ class DAQ(threading.Thread):
         return available, used
 
     def flush_channel(self, number):
-	"""
+        """
         Flush the channel
 
         Args:
@@ -978,10 +951,10 @@ class DAQ(threading.Thread):
         Returns:
             ValueError: Invalid number
         """
-	if not 1 <= number <= 4:
-            raise ValueError('Invalid number')
+        if not 1 <= number <= 4:
+                raise ValueError('Invalid number')
 
-	self.send_command(mkcmd(45, 'B', number), 'B')
+        self.send_command(mkcmd(45, 'B', number), 'B')
 
 
     def __destroy_channel(self, number):
@@ -1226,14 +1199,14 @@ class DAQ(threading.Thread):
             self.__setup_channel(s.number, s.npoints, s.continuous)
             self.__conf_channel(s.number, s.mode, s.pinput,
                                 s.ninput, s.gain, s.nsamples)
-	    self.__trigger_setup(s.number, s.trg_mode, s.trg_value)
+            self.__trigger_setup(s.number, s.trg_mode, s.trg_value)
 
             if (s.get_mode() == ANALOG_OUTPUT):
                 pr_data, pr_offset = s.get_preload_data()
                 for i in range(len(pr_offset)):
                     self.__load_signal(pr_offset[i], pr_data[i])
                 break
-	
+    
         self.send_command(mkcmd(64, ''), '')
 
         if not self.__running:
@@ -1296,9 +1269,9 @@ class DAQ(threading.Thread):
                         # data available
                         available, used = self.dchanindex()
                         for i in range(len(channel)):
-                            whichexp = used.index(channel[i]+1)
-                            self.experiments[whichexp].add_point(
-                                self.__raw_to_volts(data[i], whichexp))
+                            exp = self.experiments[used.index(channel[i]+1)]
+                            gain_id, pinput, ninput, _ = exp.get_parameters()
+                            exp.add_point(self.__raw_to_volts(data[i], gain_id, pinput, ninput))
 
                     elif result == 3:
                         self.halt()
