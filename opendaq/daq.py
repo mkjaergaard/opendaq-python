@@ -18,8 +18,8 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with opendaq.  If not, see <http://www.gnu.org/licenses/>.
 
-import struct
 import time
+import struct
 import serial
 import threading
 from opendaq.common import check_crc, mkcmd, check_stream_crc, LengthError, CRCError
@@ -43,11 +43,20 @@ DIGITAL_OUTPUT = 3
 COUNTER_INPUT = 4
 CAPTURE_INPUT = 5
 
-GAIN_M_X05 = 0
+GAIN_M_X033 = 0
 GAIN_M_X1 = 1
 GAIN_M_X2 = 2
 GAIN_M_X10 = 3
 GAIN_M_X100 = 4
+
+GAIN_S_X1 = 0
+GAIN_S_X2 = 1
+GAIN_S_X4 = 2
+GAIN_S_X5 = 3
+GAIN_S_X8 = 4
+GAIN_S_X10 = 5
+GAIN_S_X16 = 6
+GAIN_S_X20 = 7
 
 SW_TRG   = 0          
 DIN1_TRG = 1           
@@ -59,17 +68,11 @@ DIN6_TRG = 6
 ABIG_TRG = 10      
 ASML_TRG = 20
 
-GAIN_S_X1 = 0
-GAIN_S_X2 = 1
-GAIN_S_X4 = 2
-GAIN_S_X5 = 3
-GAIN_S_X8 = 4
-GAIN_S_X10 = 5
-GAIN_S_X16 = 6
-GAIN_S_X20 = 7
-
 BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
 BASE_GAINS_S = [1./v*12./2**13 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
+DAC_BASE_GAIN_M = 1/2000.
+DAC_BASE_GAIN_S = 1/16000.
+DAC_BASE_OFFSET_M = 8192
 
 
 class DAQ(threading.Thread):
@@ -298,7 +301,6 @@ class DAQ(threading.Thread):
             base_gain = BASE_GAINS_M[gain_id]
             gain = self.adc_gains[gain_id]
             offset = self.adc_offsets[gain_id]
-            print base_gain, gain, offset, raw
         elif self.__hw_ver == 's':
             n = pinput
             if ninput != 0:
@@ -307,6 +309,7 @@ class DAQ(threading.Thread):
             gain = self.adc_gains[n]
             offset = self.adc_offsets[n]
 
+        print gain_id, base_gain, gain, offset, raw
         return (raw - offset)*base_gain*gain
 
     def __volts_to_raw(self, volts):
@@ -323,57 +326,49 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: DAC voltage out of range
         """
-        value = int(round(volts*1000))
 
-        if self.__hw_ver == 'm' and not -4096 <= value < 4096:
+        if self.__hw_ver == 'm' and not -4.096 <= volts < 4.096:
             raise ValueError('DAC voltage out of range')
-        elif self.__hw_ver == 's' and not 0 <= value < 4096:
+        elif self.__hw_ver == 's' and not 0 <= volts < 4.096:
             raise ValueError('DAC voltage out of range')
 
-        data = 2*(value * self.dac_gain/1000.0 + self.dac_offset + 4096)
-        if self.__hw_ver == 's':
-            data = max(0, min(data, 65535))  # clamp value
+        base_gain = DAC_BASE_GAIN_M if self.__hw_ver == 'm' else DAC_BASE_GAIN_S
+        offset = self.dac_offset + (DAC_BASE_OFFSET_M if self.__hw_ver == 'm' else 0)
 
-        return data
+        raw = int(round(volts/(self.dac_gain*base_gain) + offset))
+        print base_gain, offset, raw
+        return max(0, min(raw, 65535))  # clamp value
+
+    def set_dac(self, raw):
+        """Set DAC output (raw value)
+
+        Set the raw value of the DAC.
+
+        Args:
+            raw: Raw ADC value
+        Raises:
+            ValueError: Value out of range
+        """
+        if (self. __hw_ver == 'm' and not 0 <= raw < 16384) or \
+                (self. __hw_ver == 's' and not 0 <= raw < 65536):
+                    raise ValueError('DAC value out of range')
+
+        return self.send_command(mkcmd(24, 'H', int(round(raw))), 'h')[0]
 
     def set_analog(self, volts):
-        """Set DAC output voltage (millivolts value).
-        Set the output voltage value between the voltage hardware limits.
-        Device calibration values are used for the calculation.
+        """Set DAC output (volts).
+        Set the output voltage of the DAC. Device calibration values are taken
+        into account.
 
         openDAQ[M] range: -4.096 V to +4.096 V
-
         openDAQ[S] range: 0 V to +4.096 V
 
         Args:
-            volts: New DAC output value in millivolts
+            volts: DAC output value in volts
         Raises:
-            ValueError: DAC voltage out of range
+            ValueError: Value out of range
         """
-        if self.__hw_ver == 'm' and not -4096 <= volts < 4096:
-            raise ValueError('DAC voltage out of range')
-        elif self.__hw_ver == 's' and not 0 <= volts < 4096:
-            raise ValueError('DAC voltage out of range')
-
-        data = self.__volts_to_raw(volts)
-        self.set_dac(data)
-
-    def set_dac(self, raw):
-        """Set DAC output (binary value)
-
-        Set the raw value into DAC without data conversion.
-
-        Args:
-            raw: RAW binary ADC data value.
-        Raises:
-            ValueError: DAC voltage out of range
-        """
-        value = int(round(raw))
-        if (self. __hw_ver == 'm' and not 0 <= value < 16384) or (
-                self. __hw_ver == 's' and not 0 <= value < 65536):
-                    raise ValueError('DAC value out of range')
-
-        return self.send_command(mkcmd(24, 'H', value), 'h')[0]
+        self.set_dac(self.__volts_to_raw(volts))
 
     def set_port_dir(self, output):
         """Configure all PIOs directions.
@@ -567,8 +562,8 @@ class DAQ(threading.Thread):
             (0:16 for openDAQ [S])
         Returns:
             gain_id
-            Gain (x100000[M] or x10000[S])
-            Offset
+            Gain raw correction x100000
+            Offset raw correction (ADUs)
         Raises:
             ValueError: gain_id out of range
         """
@@ -596,8 +591,8 @@ class DAQ(threading.Thread):
         Gets calibration values for all the available device configurations
 
         Returns:
-            Gains
-            Offsets
+            Gain corrections (0.9 to 1.1)
+            Offsets (ADUs)
         """
         gains = []
         offsets = []
@@ -632,54 +627,46 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(37, 'Bhh', gain_id,
                                        corr, offset), 'Bhh')
 
-    def set_adc_cal(self, corrs, offsets, flag):
+    def set_adc_cal(self, corrs, offsets, flag='SE'):
         """
         Set device calibration
 
         Args:
-            corrs: Gain correction: G = Gbase*(1 + corr/100000)
+            corrs: Gain corrections (0.9 to 1.1)
             offsets: Offset raw value (-32768 to 32767)
-            flag: 'M', 'SE' or 'DE'
+            flag: 'SE' or 'DE' (only for 'S' model)
         Raises:
             ValueError: Values out of range
         """
-        for corr in corrs:
-            if not -2**15 <= corr < (2**15-1):
-                raise ValueError("correction out of range")
 
-        for offset in offsets:
-            if not -2**15 <= offset < (2**15-1):
-                raise ValueError("offset out of range")
+        values = [int(round((c - 1)*1e5)) for c in corrs]
 
-        if flag == 'M':
+        if self. __hw_ver == 'm':
             for i in range(1, 6):
-                self.__set_calibration(i, corrs[i-1], offsets[i-1])
-        elif flag == 'SE':
-            for i in range(1, 9):
-                self.__set_calibration(i, corrs[i-1], offsets[i-1])
-        elif flag == 'DE':
-            for i in range(9, 17):
-                self.__set_calibration(i, corrs[i-9], offsets[i-9])
+                self.__set_calibration(i, values[i-1], offsets[i-1])
         else:
-            raise ValueError("Invalid flag")
+            if flag == 'SE':
+                for i in range(1, 9):
+                    self.__set_calibration(i, values[i-1], offsets[i-1])
+            elif flag == 'DE':
+                for i in range(9, 17):
+                    self.__set_calibration(i, values[i-9], offsets[i-9])
+            else:
+                raise ValueError("Invalid flag")
+        self.adc_gains, self.adc_offsets = self.get_adc_cal()
 
     def set_dac_cal(self, corr, offset):
         """
         Set DAC calibration
 
         Args:
-            corr: Gain multiplied by 100000 ([M]) or 10000 ([S])
-            ofset: Offset raw value (-32768 to 32678)
+            corrs: Gain corrections (0.9 to 1.1)
+            offset: Offset raw value (-32768 to 32767)
         Raises:
             ValueError: Values out of range
         """
-        if not 0 <= corr < 65536:
-            raise ValueError("correction out of range")
-
-        if not -32768 <= offset < 32768:
-            raise ValueError("offset out of range")
-
-        self.__set_calibration(0, corr, offset)
+        self.__set_calibration(0, int(round((corr - 1)*1e5)), offset)
+        self.dac_gain, self.dac_offset = self.get_dac_cal()
 
     def set_id(self, id):
         """
@@ -821,7 +808,7 @@ class DAQ(threading.Thread):
 
             - gain: Select PGA multiplier.
                 In case of openDAQ [M]:
-                    0. x1/2
+                    0. x1/3
                     1. x1
                     2. x2
                     3. x10
@@ -1106,10 +1093,6 @@ class DAQ(threading.Thread):
         self.set_analog(pr_data[0])
         for volts in pr_data:
             raw = self.__volts_to_raw(volts)
-            '''
-            if self.__hw_ver == "s":
-                raw *= 2
-            '''
             values.append(raw)
         return self.send_command(mkcmd(23, 'h%dH' % len(values),
                                        pr_of, *values), 'Bh')
