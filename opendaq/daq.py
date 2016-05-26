@@ -309,7 +309,6 @@ class DAQ(threading.Thread):
             gain = self.adc_gains[n]
             offset = self.adc_offsets[n]
 
-        print gain_id, base_gain, gain, offset, raw
         return (raw - offset)*base_gain*gain
 
     def __volts_to_raw(self, volts):
@@ -336,7 +335,6 @@ class DAQ(threading.Thread):
         offset = self.dac_offset + (DAC_BASE_OFFSET_M if self.__hw_ver == 'm' else 0)
 
         raw = int(round(volts/(self.dac_gain*base_gain) + offset))
-        print base_gain, offset, raw
         return max(0, min(raw, 65535))  # clamp value
 
     def set_dac(self, raw):
