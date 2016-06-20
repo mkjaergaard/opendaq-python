@@ -68,10 +68,12 @@ DIN6_TRG = 6
 ABIG_TRG = 10      
 ASML_TRG = 20
 
-BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+#BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 160., 450.)] #CUSTOM HARDWARE ITMA
 BASE_GAINS_S = [1./v*12./2**13 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
 DAC_BASE_GAIN_M = 1/2000.
 DAC_BASE_GAIN_S = 1/16000.
+DAC_BASE_GAIN_T = 2.5/4096 #gain for TP4x
 DAC_BASE_OFFSET_M = 8192
 
 
@@ -93,7 +95,12 @@ class DAQ(threading.Thread):
 
         info = self.get_info()
         self.__fw_ver = info[1]
-        self.__hw_ver = 'm' if info[0] == 1 else 's'
+        if info[0] == 1:
+            self.__hw_ver = 'm'
+        elif info[0] == 3:
+            self.__hw_ver = 't'
+        else:
+            self.__hw_ver = 's'
         self.adc_gains, self.adc_offsets = self.get_adc_cal()
         self.dac_gain, self.dac_offset = self.get_dac_cal()
 
@@ -155,6 +162,20 @@ class DAQ(threading.Thread):
         # Strip 'command' and 'length' values from returned data
         return data[2:]
 
+
+    def enable_crc(self, on):
+        """Enable/Disable the cyclic redundancy check
+
+        Args:
+            on: Enable CRC
+        Raises:
+            ValueError: on value out of range
+        """
+        if on not in [0, 1]:
+            raise ValueError("on value out of range")
+
+        return self.send_command(mkcmd(55, 'B', on), 'B')[0]
+
     def get_info(self):
         """Read device configuration
 
@@ -170,16 +191,109 @@ class DAQ(threading.Thread):
             [hardware version, firmware version, device ID number]
         """
         hv, fv, serial = self.get_info()
-        print "Hardware Version: ", "[M]" if hv == 1 else "[S]"
-        print "Firmware Version:", fv
-        print "Serial number: OD" + ("M08" if hv == 1
-                                     else "S08") + str(serial).zfill(3) + "5"
+        if hv == 1:           
+            print "Hardware Version: [M]" 
+            print "Firmware Version:", fv
+            print "Serial number: ODM08" + str(serial).zfill(3) + "5"
+        elif hv == 2:
+            print "Hardware Version: [M]" 
+            print "Firmware Version:", fv
+            print "Serial number: ODS08" + str(serial).zfill(3) + "5"
+        elif hv == 3:
+            print "Hardware Version: TP4x" 
+            print "Firmware Version:", fv
+            print "Serial number: TP4X" + str(serial).zfill(3)
+
 
     def hw_ver(self):
         return self.__hw_ver
 
     def fw_ver(self):
         return self.__fw_ver
+
+    def __raw_to_volts(self, raw, gain_id, pinput, ninput=0):
+        """Convert a raw value to a value in volts.
+
+        Args:
+            raw: Value to convert to volts
+            gain_id: ID of the analog configuration setup
+        """
+
+        if self.__hw_ver == 'm':
+            base_gain = BASE_GAINS_M[gain_id]
+            gain = self.adc_gains[gain_id]
+            offset = self.adc_offsets[gain_id]
+        elif self.__hw_ver == 's':
+            n = pinput
+            if ninput != 0:
+                n += 8
+            base_gain = BASE_GAINS_S[gain_id]
+            gain = self.adc_gains[n]
+            offset = self.adc_offsets[n]
+
+        return (raw - offset)*base_gain*gain
+
+    def __volts_to_raw(self, volts):
+        """Convert a value in volts to a raw value.
+        Device calibration values are used for the calculation.
+
+        openDAQ[M] range: -4.096 V to +4.096 V
+        openDAQ[S] range: 0 V to +4.096 V
+
+        Args:
+            volts: value to convert to raw
+        Returns:
+            Raw value
+        Raises:
+            ValueError: DAC voltage out of range
+        """
+        if self.__hw_ver == 'm' and not -4.096 <= volts < 4.096:
+            raise ValueError('DAC voltage out of range')
+        elif self.__hw_ver == 's' and not 0 <= volts < 4.096:
+            raise ValueError('DAC voltage out of range')
+        elif self.__hw_ver == 't' and not 0 <= volts < 2.5:
+            raise ValueError('DAC voltage out of range')
+        
+        if self.__hw_ver == 'm':
+            base_gain = DAC_BASE_GAIN_M
+            offset = self.dac_offset + DAC_BASE_OFFSET_M     
+        elif self.__hw_ver == 't':
+            base_gain = DAC_BASE_GAIN_T
+            offset = self.dac_offset + 0
+        else:
+            base_gain = DAC_BASE_GAIN_S
+            offset = self.dac_offset + 0
+            
+        raw = int(round(volts/(self.dac_gain*base_gain) + offset))
+        return max(0, min(raw, 65535))  # clamp value
+
+    def set_dac(self, raw, number=0):
+        """Set DAC output (raw value)
+
+        Set the raw value of the DAC.
+
+        Args:
+            raw: Raw ADC value
+        Raises:
+            ValueError: Value out of range
+        """
+
+        return self.send_command(mkcmd(13, 'HB', int(round(raw)), number), 'h')[0]
+
+    def set_analog(self, volts, number=0):
+        """Set DAC output (volts).
+        Set the output voltage of the DAC. Device calibration values are taken
+        into account.
+
+        openDAQ[M] range: -4.096 V to +4.096 V
+        openDAQ[S] range: 0 V to +4.096 V
+
+        Args:
+            volts: DAC output value in volts
+        Raises:
+            ValueError: Value out of range
+        """
+        self.set_dac(self.__volts_to_raw(volts), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value
@@ -262,20 +376,7 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(2, 'BBBB', pinput,
                                        ninput, gain, nsamples), 'hBBBB')
 
-    def enable_crc(self, on):
-        """Enable/Disable the cyclic redundancy check
-
-        Args:
-            on: Enable CRC
-        Raises:
-            ValueError: on value out of range
-        """
-        if on not in [0, 1]:
-            raise ValueError("on value out of range")
-
-        return self.send_command(mkcmd(55, 'B', on), 'B')[0]
-
-    def set_led(self, color):
+    def set_led(self, color, number = 1):
         """Choose LED status.
         LED switch on (green, red or orange) or switch off.
 
@@ -287,86 +388,11 @@ class DAQ(threading.Thread):
         if not 0 <= color <= 3:
             raise ValueError('Invalid color number')
 
-        return self.send_command(mkcmd(18, 'B', color), 'B')[0]
+        if not 1 <= number <= 4:
+            raise ValueError('Invalid led number')
 
-    def __raw_to_volts(self, raw, gain_id, pinput, ninput=0):
-        """Convert a raw value to a value in volts.
 
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
-        """
-
-        if self.__hw_ver == 'm':
-            base_gain = BASE_GAINS_M[gain_id]
-            gain = self.adc_gains[gain_id]
-            offset = self.adc_offsets[gain_id]
-        elif self.__hw_ver == 's':
-            n = pinput
-            if ninput != 0:
-                n += 8
-            base_gain = BASE_GAINS_S[gain_id]
-            gain = self.adc_gains[n]
-            offset = self.adc_offsets[n]
-
-        return (raw - offset)*base_gain*gain
-
-    def __volts_to_raw(self, volts):
-        """Convert a value in volts to a raw value.
-        Device calibration values are used for the calculation.
-
-        openDAQ[M] range: -4.096 V to +4.096 V
-        openDAQ[S] range: 0 V to +4.096 V
-
-        Args:
-            volts: value to convert to raw
-        Returns:
-            Raw value
-        Raises:
-            ValueError: DAC voltage out of range
-        """
-
-        if self.__hw_ver == 'm' and not -4.096 <= volts < 4.096:
-            raise ValueError('DAC voltage out of range')
-        elif self.__hw_ver == 's' and not 0 <= volts < 4.096:
-            raise ValueError('DAC voltage out of range')
-
-        base_gain = DAC_BASE_GAIN_M if self.__hw_ver == 'm' else DAC_BASE_GAIN_S
-        offset = self.dac_offset + (DAC_BASE_OFFSET_M if self.__hw_ver == 'm' else 0)
-
-        raw = int(round(volts/(self.dac_gain*base_gain) + offset))
-        return max(0, min(raw, 65535))  # clamp value
-
-    def set_dac(self, raw):
-        """Set DAC output (raw value)
-
-        Set the raw value of the DAC.
-
-        Args:
-            raw: Raw ADC value
-        Raises:
-            ValueError: Value out of range
-        """
-        if (self. __hw_ver == 'm' and not 0 <= raw < 16384) or \
-                (self. __hw_ver == 's' and not 0 <= raw < 65536):
-                    raise ValueError('DAC value out of range')
-
-        return self.send_command(mkcmd(24, 'H', int(round(raw))), 'h')[0]
-
-    def set_analog(self, volts):
-        """Set DAC output (volts).
-        Set the output voltage of the DAC. Device calibration values are taken
-        into account.
-
-        openDAQ[M] range: -4.096 V to +4.096 V
-        openDAQ[S] range: 0 V to +4.096 V
-
-        Args:
-            volts: DAC output value in volts
-        Raises:
-            ValueError: Value out of range
-        """
-        self.set_dac(self.__volts_to_raw(volts))
+        return self.send_command(mkcmd(18, 'BB', color, number-1), 'B')[0]
 
     def set_port_dir(self, output):
         """Configure all PIOs directions.
@@ -435,117 +461,6 @@ class DAQ(threading.Thread):
 
         return self.send_command(mkcmd(3, 'BB', number,
                                        int(bool(value))), 'BB')
-
-    def init_counter(self, edge):
-        """Initialize the edge Counter
-        Configure which edge increments the count:
-        Low-to-High (1) or High-to-Low (0).
-        Args:
-            edge: high-to-low (0) or low-to-high (1)
-        Raises:
-            ValueError: edge value out of range
-        """
-        if edge not in [0, 1]:
-            raise ValueError("edge value out of range")
-
-        return self.send_command(mkcmd(41, 'B', edge), 'B')[0]
-
-    def get_counter(self, reset):
-        """Get the counter value
-
-        Args:
-            reset: reset the counter after perform reading (>0: reset)
-        Raises:
-            ValueError: reset value out of range
-        """
-        if not 0 <= reset <= 255:
-            raise ValueError("reset value out of range")
-
-        return self.send_command(mkcmd(42, 'B', reset), 'H')[0]
-
-    def init_capture(self, period):
-        """Start Capture mode around a given period
-
-        Args:
-            period: estimated period of the wave (in microseconds)
-        Raises:
-            ValueError: period out of range
-        """
-        if not 0 <= period <= 65535:
-            raise ValueError("period out of range")
-
-        return self.send_command(mkcmd(14, 'H', period), 'H')[0]
-
-    def stop_capture(self):
-        """Stop Capture mode
-        """
-        self.send_command(mkcmd(15, ''), '')
-
-    def get_capture(self, mode):
-        """Get Capture reading for the period length
-        Low cycle, High cycle or Full period.
-        Args:
-            mode: Period length
-                0: Low cycle
-                1: High cycle
-                2: Full period
-        Returns:
-            mode
-            Period: The period length in microseconds
-        Raises:
-            ValueError: mode value out of range
-        """
-        if mode not in [0, 1, 2]:
-            raise ValueError("mode value out of range")
-
-        return self.send_command(mkcmd(16, 'B', mode), 'BH')
-
-    def init_encoder(self, resolution):
-        """Start Encoder function
-
-        Args:
-            resolution: Maximum number of ticks per round [0:65535]
-        Raises:
-            ValueError: resolution value out of range
-        """
-        if not 0 <= resolution <= 65535:
-            raise ValueError("resolution value out of range")
-
-        return self.send_command(mkcmd(50, 'B', resolution), 'B')[0]
-
-    def get_encoder(self):
-        """Get current encoder relative position
-
-        Returns:
-            Position: The actual encoder value.
-        """
-        return self.send_command(mkcmd(52, ''), 'H')[0]
-
-    def stop_encoder(self):
-        """Stop encoder"""
-        self.send_command(mkcmd(51, ''), '')
-
-    def init_pwm(self, duty, period):
-        """Start PWM output with a given period and duty cycle
-
-        Args:
-            duty: High time of the signal [0:1023](0 always low,\
-                 1023 always high)
-            period: Period of the signal (microseconds) [0:65535]
-        Raises:
-            ValueError: Values out of range
-        """
-        if not 0 <= duty < 1024:
-            raise ValueError("duty value out of range")
-
-        if not 0 <= period <= 65535:
-            raise ValueError("period value out of range")
-
-        return self.send_command(mkcmd(10, 'HH', duty, period), 'HH')
-
-    def stop_pwm(self):
-        """Stop PWM"""
-        self.send_command(mkcmd(11, ''), '')
 
     def __get_calibration(self, gain_id):
         """
@@ -729,6 +644,118 @@ class DAQ(threading.Thread):
         else:
             ret = self.send_command(mkcmd(29, 'B', value), 'B')[0]
         return ret
+
+    def init_counter(self, edge):
+        """Initialize the edge Counter
+        Configure which edge increments the count:
+        Low-to-High (1) or High-to-Low (0).
+        Args:
+            edge: high-to-low (0) or low-to-high (1)
+        Raises:
+            ValueError: edge value out of range
+        """
+        if edge not in [0, 1]:
+            raise ValueError("edge value out of range")
+
+        return self.send_command(mkcmd(41, 'B', edge), 'B')[0]
+
+    def get_counter(self, reset):
+        """Get the counter value
+
+        Args:
+            reset: reset the counter after perform reading (>0: reset)
+        Raises:
+            ValueError: reset value out of range
+        """
+        if not 0 <= reset <= 255:
+            raise ValueError("reset value out of range")
+
+        return self.send_command(mkcmd(42, 'B', reset), 'H')[0]
+
+    def init_capture(self, period):
+        """Start Capture mode around a given period
+
+        Args:
+            period: estimated period of the wave (in microseconds)
+        Raises:
+            ValueError: period out of range
+        """
+        if not 0 <= period <= 65535:
+            raise ValueError("period out of range")
+
+        return self.send_command(mkcmd(14, 'H', period), 'H')[0]
+
+    def stop_capture(self):
+        """Stop Capture mode
+        """
+        self.send_command(mkcmd(15, ''), '')
+
+    def get_capture(self, mode):
+        """Get Capture reading for the period length
+        Low cycle, High cycle or Full period.
+        Args:
+            mode: Period length
+                0: Low cycle
+                1: High cycle
+                2: Full period
+        Returns:
+            mode
+            Period: The period length in microseconds
+        Raises:
+            ValueError: mode value out of range
+        """
+        if mode not in [0, 1, 2]:
+            raise ValueError("mode value out of range")
+
+        return self.send_command(mkcmd(16, 'B', mode), 'BH')
+
+    def init_encoder(self, resolution):
+        """Start Encoder function
+
+        Args:
+            resolution: Maximum number of ticks per round [0:65535]
+        Raises:
+            ValueError: resolution value out of range
+        """
+        if not 0 <= resolution <= 65535:
+            raise ValueError("resolution value out of range")
+
+        return self.send_command(mkcmd(50, 'B', resolution), 'B')[0]
+
+    def get_encoder(self):
+        """Get current encoder relative position
+
+        Returns:
+            Position: The actual encoder value.
+        """
+        return self.send_command(mkcmd(52, ''), 'H')[0]
+
+    def stop_encoder(self):
+        """Stop encoder"""
+        self.send_command(mkcmd(51, ''), '')
+
+    def init_pwm(self, duty, period):
+        """Start PWM output with a given period and duty cycle
+
+        Args:
+            duty: High time of the signal [0:1023](0 always low,\
+                 1023 always high)
+            period: Period of the signal (microseconds) [0:65535]
+        Raises:
+            ValueError: Values out of range
+        """
+        if not 0 <= duty < 1024:
+            raise ValueError("duty value out of range")
+
+        if not 0 <= period <= 65535:
+            raise ValueError("period value out of range")
+
+        return self.send_command(mkcmd(10, 'HH', duty, period), 'HH')
+
+    def stop_pwm(self):
+        """Stop PWM"""
+        self.send_command(mkcmd(11, ''), '')
+
 
 
 
