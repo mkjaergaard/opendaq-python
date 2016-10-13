@@ -74,12 +74,9 @@ BASE_GAINS_S = [1./v*12./2**13 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
 BASE_GAINS_T = [1./v*23.75/32768 for v in (1, 2, 4, 8, 16, 32, 64, 128)]
 
 
-DAC_BASE_GAIN_M = 1/2000.
-DAC_BASE_GAIN_S = 1/16000.
-DAC_BASE_GAIN_T = 1.25/32768 #gain for TP4x
-
-DAC_BASE_OFFSET_M = 8192
-DAC_BASE_OFFSET_T = 0
+DAC_BASE_GAIN_M = 4.096/32768.
+DAC_BASE_GAIN_S = 4.096/32768.
+DAC_BASE_GAIN_T = 1.25/32768. #gain for TP4x
 
 
 class DAQ(threading.Thread):
@@ -100,6 +97,9 @@ class DAQ(threading.Thread):
 
         info = self.get_info()
         self.__fw_ver = info[1]
+        if self.__fw_ver < 130:
+            raise ValueError('Invalid firmware version. Please update device!')
+        
         if info[0] == 1:
             self.__hw_ver = 'm'
             self.adc_slots = 5
@@ -229,7 +229,7 @@ class DAQ(threading.Thread):
         
         for i in range(0, self.dac_slots):
             _, corr, offset = self.__get_calibration(i)
-            print i, ") <<", corr, offset
+            print i, ") <<", corr, offset, " (DAC)"
             gains.append(1. + corr/(1.*2**16))
             offsets.append(offset*1./(2**7))
         self.dac_gains = gains
@@ -251,7 +251,7 @@ class DAQ(threading.Thread):
         offsets = []
         for i in range(self.dac_slots, self.dac_slots+self.adc_slots):
             _, corr, offset = self.__get_calibration(i)
-            print i, ") <<", corr, offset
+            print i, ") <<", corr, offset, " (ADC)"
             gains.append(1. + corr/(1.*(2**16)))
             offsets.append(offset*1./(2**7))
             #print "<<",i-self.dac_slots, "%.4f" % gains[i-self.dac_slots] , "%.4f" % offsets[i-self.dac_slots]
@@ -464,17 +464,17 @@ class DAQ(threading.Thread):
         
         if self.__hw_ver == 'm':
             base_gain = DAC_BASE_GAIN_M
-            offset = self.dac_offsets[number] + DAC_BASE_OFFSET_M     
+            offset = self.dac_offsets[number]     
         elif self.__hw_ver == 't':
             base_gain = DAC_BASE_GAIN_T
             offset = self.dac_offsets[number]
         else:
             base_gain = DAC_BASE_GAIN_S
-            offset = self.dac_offsets[number] + 0
+            offset = self.dac_offsets[number]
             
         raw = int(round(volts/(self.dac_gains[number]*base_gain) + offset))
         #print self.dac_gains, self.dac_offsets
-        #print raw,"=",volts,"/(",self.dac_gains[number],"*",base_gain,") + ",offset, ")"
+        print raw,"=",volts,"/(",self.dac_gains[number],"*",base_gain,") + ",offset, ")"
         return max(-32768, min(raw, 32767))  # clamp value
 
     def set_dac(self, raw, number=1):
