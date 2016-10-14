@@ -68,9 +68,8 @@ DIN6_TRG = 6
 ABIG_TRG = 10      
 ASML_TRG = 20
 
-#BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
-BASE_GAINS_M = [-1./v*4.096/32768 for v in (1./3, 1., 2., 160., 450.)] #CUSTOM HARDWARE ITMA
-BASE_GAINS_S = [1./v*12./2**13 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
+BASE_GAINS_M = [1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+BASE_GAINS_S = [1./v*12./32768 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
 BASE_GAINS_T = [1./v*23.75/32768 for v in (1, 2, 4, 8, 16, 32, 64, 128)]
 
 
@@ -364,7 +363,7 @@ class DAQ(threading.Thread):
             print "Firmware Version:", fv
             print "Serial number: ODM08" + str(serial).zfill(3) + "5"
         elif hv == 2:
-            print "Hardware Version: [M]" 
+            print "Hardware Version: [S]" 
             print "Firmware Version:", fv
             print "Serial number: ODS08" + str(serial).zfill(3) + "5"
         elif hv == 10:
@@ -805,7 +804,7 @@ class DAQ(threading.Thread):
         if not 0 <= resolution <= 65535:
             raise ValueError("resolution value out of range")
 
-        return self.send_command(mkcmd(50, 'B', resolution), 'B')[0]
+        return self.send_command(mkcmd(50, 'H', resolution), 'H')[0]
 
     def get_encoder(self):
         """Get current encoder relative position
