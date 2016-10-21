@@ -77,6 +77,30 @@ DAC_BASE_GAIN_M = 4.096/32768.
 DAC_BASE_GAIN_S = 4.096/32768.
 DAC_BASE_GAIN_T = 1.25/32768. #gain for TP4x
 
+class DAQModel(object):
+    def get_gains():
+        raise NotImplemented
+
+
+class ModelM(DAQModel):
+    model_id = 1
+    my_hw = 'm'
+    def get_gains():
+        raise NotImplemented
+    
+class ModelS(DAQModel):
+    model_id = 2
+    my_hw = 's'
+    def get_gains():
+        raise NotImplemented
+
+
+def get_model(model_id):
+    for model in DAQModel.__subclasses__():
+        if model.model_id == model_id:
+            return model()
+    raise ValueError("Unknown model ID")
+
 
 class DAQ(threading.Thread):
     def __init__(self, port, debug=False):
@@ -95,6 +119,9 @@ class DAQ(threading.Thread):
         self.open()
 
         info = self.get_info()
+        self.model = get_model(info[0])
+        print "MODELO", self.model.my_hw
+        
         self.__fw_ver = info[1]
         if self.__fw_ver < 130:
             raise ValueError('Invalid firmware version. Please update device!')
