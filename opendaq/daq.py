@@ -1,6 +1,6 @@
 # !/usr/bin/env python
 
-# Copyright 2015
+# Copyright 2016
 # Ingen10 Ingenieria SL
 #
 # This file is part of opendaq.
@@ -68,38 +68,218 @@ DIN6_TRG = 6
 ABIG_TRG = 10      
 ASML_TRG = 20
 
-BASE_GAINS_M = [1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
-BASE_GAINS_S = [1./v*12./32768 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
-BASE_GAINS_T = [1./v*23.75/32768 for v in (1, 2, 4, 8, 16, 32, 64, 128)]
-
-
-DAC_BASE_GAIN_M = 4.096/32768.
-DAC_BASE_GAIN_S = 4.096/32768.
-DAC_BASE_GAIN_T = 1.25/32768. #gain for TP4x
-
 class DAQModel(object):
-    def get_gains():
+    _id = 0
+
+    def hw_ver(self):
+        return self.model_str
+
+
+    def dac_coef_range(self):
+        return range(0, self.dac_slots)
+
+
+    def adc_coef_range(self, flag):
+        return range(self.dac_slots, self.dac_slots+self.adc_slots)
+
+
+    def check_valid_dac_value(self, volts):
+        if not (self.min_dac_value <= volts <= self.max_dac_value):
+            raise ValueError("DAC voltage out of range")
+
+    def check_valid_adc_settings(self, pinput, ninput, xgain):
+        if pinput not in self.pinput_range:
+            raise ValueError("Invalid positive input selection")
+        if ninput not in self.ninput_range:
+            raise ValueError("Invalid negative input selection")
+        if xgain not in self.gain_range:
+            raise ValueError("Invalid gain selection")
+
+    def volts_to_raw(self,volts,number):
+        """
+        Convert a value in volts to a raw value.
+        Device calibration values are used for the calculation.
+
+        openDAQ[M] range: -4.096 V to +4.096 V
+        openDAQ[S] range: 0 V to +4.096 V
+
+        Args:
+            volts: value to convert to raw
+        Returns:
+            Raw value
+        Raises:
+            ValueError: DAC voltage out of range
+        """    
+        self.check_valid_dac_value(volts)
+
+        if number not in self.dac_coef_range():
+            raise ValueError('DAC calibration slot out of range')
+
+        corr = self.dac_gains[number]
+        offset = self.dac_offsets[number]
+            
+        raw = int(round(volts/(corr*self.dac_base_gain) + offset))
+        #print self.dac_gains, self.dac_offsets
+        print raw,"=",volts,"/(",corr,"*",self.dac_base_gain,") + ",offset, ")"
+        return max(-32768, min(raw, 32767))  # clamp value        
+        
+    def get_gains(self):
         raise NotImplemented
 
 
 class ModelM(DAQModel):
-    model_id = 1
-    my_hw = 'm'
-    def get_gains():
+    _id = 1
+    
+    def __init__(self):
+        self.model_str = 'm'
+
+        self.adc_slots = 5
+        self.adc_gains = []
+        self.adc_offsets = []
+        self.adc_base_gains = [1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+        self.min_adc_value = -4.096
+        self.max_adc_value = 4.095
+
+        self.pinput_range = range(1,9)
+        self.ninput_range = [0, 5, 6, 7, 8, 25]
+        self.gain_range = range(0,5)
+
+        self.dac_slots = 1
+        self.dac_gains = []
+        self.dac_offsets = []
+        self.dac_base_gain = 4.096/32768.
+        self.min_dac_value = -4.096
+        self.max_dac_value = 4.095
+        
+    def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
+        """
+        Convert a raw value to a value in volts.
+
+        Args:
+            raw: Value to convert to volts
+            gain_id: ID of the analog configuration setup
+        """
+        base_gain = self.adc_base_gains[gain_id]
+        gain = self.adc_gains[gain_id]
+        offset = self.adc_offsets[gain_id]
+        return (raw - offset)*base_gain*gain
+
+    def get_gains(self):
         raise NotImplemented
+
     
 class ModelS(DAQModel):
-    model_id = 2
-    my_hw = 's'
-    def get_gains():
+    _id = 2
+    
+    def __init__(self):
+        self.model_str = 's'
+
+        self.adc_slots = 16
+        self.adc_gains = []
+        self.adc_offsets = []
+        self.adc_base_gains = [1./v*12./32768 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
+        self.min_adc_value = -12
+        self.max_adc_value = 12
+
+        self.pinput_range = range(1,9)
+        self.ninput_range = [0]
+        self.gain_range = range(0,8)
+        
+        self.dac_slots = 1
+        self.dac_gains = []
+        self.dac_offsets = []
+        self.dac_base_gain = 4.096/32768.
+        self.min_dac_value = 0
+        self.max_dac_value = 4.095
+
+    def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
+        """
+        Convert a raw value to a value in volts.
+
+        Args:
+            raw: Value to convert to volts
+            gain_id: ID of the analog configuration setup
+        """
+        n = pinput
+        if ninput != 0:
+            n += 8
+        base_gain = self.adc_base_gains[gain_id]
+        gain = self.adc_gains[n]
+        offset = self.adc_offsets[n]
+        return (raw - offset)*base_gain*gain
+
+    def check_valid_adc_settings(self, pinput, ninput, xgain):
+        if pinput not in self.pinput_range:
+            raise ValueError("Invalid positive input selection")
+        if xgain not in self.gain_range:
+            raise ValueError("Invalid gain selection")
+        if ninput != 0 and (pinput % 2 == 0 and ninput != pinput - 1
+                            or pinput % 2 != 0 and ninput != pinput + 1):
+                    raise ValueError("Invalid negative input selection")
+
+    def adc_coef_range(self,flag):
+        if flag == 'SE':
+            return range(self.dac_slots, self.dac_slots+self.adc_slots/2)
+        elif flag == 'DE':
+            return range(self.dac_slots+self.adc_slots/2+1, self.dac_slots+self.adc_slots)
+        elif flag == 'ALL':
+            return range(self.dac_slots, self.dac_slots+self.adc_slots)
+        else:
+            raise ValueError("Invalid flag")
+
+    def get_gains(self):
+        raise NotImplemented
+
+
+class ModelTP8(DAQModel):
+    _id = 10
+    
+    def __init__(self):
+        self.model_str = 't'
+        
+        self.adc_slots = 12
+        self.adc_gains = []
+        self.adc_offsets = []
+        self.adc_base_gains = [1./v*23.75/32768 for v in (1, 2, 4, 8, 16, 32, 64, 128)]
+        self.min_adc_value = -23.75
+        self.max_adc_value = 23.75
+
+        self.pinput_range = range(1,4)
+        self.ninput_range = [0]
+        self.gain_range = range(0,8)
+        
+        self.dac_slots = 4
+        self.dac_gains = []
+        self.dac_offsets = []
+        self.dac_base_gain = 1.25/32768.
+        self.min_dac_value = -1.25
+        self.max_dac_value = 1.25        
+
+    def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
+        """
+        Convert a raw value to a value in volts.
+
+        Args:
+            raw: Value to convert to volts
+            gain_id: ID of the analog configuration setup
+        """        
+        base_gain = self.adc_base_gains[gain_id]
+        gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
+        offset = self.adc_offsets[pinput-1] * (2**gain_id) + self.adc_offsets[4+gain_id]
+        return (raw - offset)*base_gain*gain
+    
+    def get_gains(self):
         raise NotImplemented
 
 
 def get_model(model_id):
     for model in DAQModel.__subclasses__():
-        if model.model_id == model_id:
+        if model._id == model_id:
             return model()
     raise ValueError("Unknown model ID")
+
+
+
 
 
 class DAQ(threading.Thread):
@@ -120,30 +300,15 @@ class DAQ(threading.Thread):
 
         info = self.get_info()
         self.model = get_model(info[0])
-        print "MODELO", self.model.my_hw
+        print "MODELO", self.model.hw_ver()
         
         self.__fw_ver = info[1]
         if self.__fw_ver < 130:
             raise ValueError('Invalid firmware version. Please update device!')
-        
-        if info[0] == 1:
-            self.__hw_ver = 'm'
-            self.adc_slots = 5
-            self.dac_slots = 1
-        elif info[0] == 10:
-            self.__hw_ver = 't'
-            self.adc_slots = 12
-            self.dac_slots = 4
-        else:
-            self.__hw_ver = 's'
-            self.adc_slots = 16
-            self.dac_slots = 1
            
         time.sleep(.05)
-        #self.dac_gains, self.dac_offsets =
         self.get_dac_cal()
         time.sleep(.05)
-        #self.adc_gains, self.adc_offsets =
         self.get_adc_cal()
 
         self.experiments = []
@@ -237,8 +402,8 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: gain_id out of range
         """
-        if not 0 <= gain_id <= self.dac_slots+self.adc_slots:
-                    raise ValueError("gain_id out of range")
+        if (gain_id not in self.model.dac_coef_range()) and (gain_id not in self.model.adc_coef_range('ALL')):
+            raise ValueError("gain_id out of range")
 
         return self.send_command(mkcmd(36, 'B', gain_id), 'Bhh')
 
@@ -253,13 +418,13 @@ class DAQ(threading.Thread):
         gains = []
         offsets = []
         
-        for i in range(0, self.dac_slots):
+        for i in self.model.dac_coef_range():
             _, corr, offset = self.__get_calibration(i)
             print i, ") <<", corr, offset, " (DAC)"
             gains.append(1. + corr/(1.*2**16))
             offsets.append(offset*1./(2**7))
-        self.dac_gains = gains
-        self.dac_offsets = offsets
+        self.model.dac_gains = gains
+        self.model.dac_offsets = offsets
         return gains, offsets
 
 
@@ -275,14 +440,14 @@ class DAQ(threading.Thread):
         """
         gains = []
         offsets = []
-        for i in range(self.dac_slots, self.dac_slots+self.adc_slots):
+        for i in self.model.adc_coef_range('ALL'):
             _, corr, offset = self.__get_calibration(i)
             print i, ") <<", corr, offset, " (ADC)"
             gains.append(1. + corr/(1.*(2**16)))
             offsets.append(offset*1./(2**7))
-            #print "<<",i-self.dac_slots, "%.4f" % gains[i-self.dac_slots] , "%.4f" % offsets[i-self.dac_slots]
-        self.adc_gains = gains
-        self.adc_offsets = offsets
+            #print "<<",i-self.model.dac_slots, "%.4f" % gains[i-self.model.dac_slots] , "%.4f" % offsets[i-self.model.dac_slots]
+        self.model.adc_gains = gains
+        self.model.adc_offsets = offsets
         return gains, offsets
 
     def __set_calibration(self, gain_id, corr, offset):
@@ -296,8 +461,8 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: Values out of range
         """
-        if not 0 <= gain_id <= self.dac_slots+self.adc_slots:
-                    raise ValueError("gain_id out of range")
+        if (gain_id not in self.model.dac_coef_range()) and (gain_id not in self.model.adc_coef_range('ALL')):
+            raise ValueError("gain_id out of range")
 
         print gain_id, ") >>",corr, offset
         return self.send_command(mkcmd(37, 'Bhh', gain_id,
@@ -317,19 +482,19 @@ class DAQ(threading.Thread):
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
         valuesb = [int(c*(2**7)) for c in offsets]
 
-        for i in range( 0, self.dac_slots):
+        for i in self.model.dac_coef_range():
             self.__set_calibration(i, valuesm[i], valuesb[i])
 
-        #self.dac_gains, self.dac_offsets = self.get_dac_cal()
+        #self.model.dac_gains, self.model.dac_offsets = self.get_dac_cal()
 
-    def set_adc_cal(self, corrs, offsets, flag='SE'):
+    def set_adc_cal(self, corrs, offsets, flag='ALL'):
         """
         Set device calibration
 
         Args:
             corrs: Gain corrections (0.9 to 1.1)
             offsets: Offset raw value (-32768 to 32767)
-            flag: 'SE' or 'DE' (only for 'S' model)
+            flag: 'ALL', 'SE' or 'DE' (only for 'S' model)
         Raises:
             ValueError: Values out of range
         """
@@ -337,12 +502,18 @@ class DAQ(threading.Thread):
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
         valuesb = [int(c*(2**7)) for c in offsets]
 
-        if self. __hw_ver == 'm':
-            for i in range(self.dac_slots, self.dac_slots+self.adc_slots):
-                self.__set_calibration(i, valuesm[i-self.dac_slots], valuesb[i-self.dac_slots])
-        if self. __hw_ver == 't':
-            for i in range(self.dac_slots, self.dac_slots+self.adc_slots):
-                self.__set_calibration(i, valuesm[i-self.dac_slots], valuesb[i-self.dac_slots])
+        for i,j in enumerate(self.model.adc_coef_range(flag)):
+            self.__set_calibration(j, valuesm[i], valuesb[i])
+
+        #self.model.adc_gains, self.model.adc_offsets = self.get_adc_cal()
+
+        """
+        if self.model.hw_ver() == 'm':
+            for i in range(self.model.dac_slots, self.model.dac_slots+self.model.adc_slots):
+                self.__set_calibration(i, valuesm[i-self.model.dac_slots], valuesb[i-self.model.dac_slots])
+        if self.model.hw_ver() == 't':
+            for i in range(self.model.dac_slots, self.model.dac_slots+self.model.adc_slots):
+                self.__set_calibration(i, valuesm[i-self.model.dac_slots], valuesb[i-self.model.dac_slots])
         else:
             if flag == 'SE':
                 for i in range(1, 9):
@@ -352,7 +523,8 @@ class DAQ(threading.Thread):
                     self.__set_calibration(i, valuesm[i-9], valuesb[i-9])
             else:
                 raise ValueError("Invalid flag")
-        #self.adc_gains, self.adc_offsets = self.get_adc_cal()
+
+        """
 
     def set_id(self, id):
         """
@@ -400,7 +572,7 @@ class DAQ(threading.Thread):
 
 
     def hw_ver(self):
-        return self.__hw_ver
+        return self.model.hw_ver()
 
     def fw_ver(self):
         return self.__fw_ver
@@ -436,73 +608,6 @@ class DAQ(threading.Thread):
         #print "write eeprom:" , pos , val
         return self.send_command(mkcmd(30, 'BBB', pos, 1, val), 'BBB')
 
-
-    def __raw_to_volts(self, raw, gain_id, pinput, ninput=0):
-        """Convert a raw value to a value in volts.
-
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
-        """
-
-        if self.__hw_ver == 'm':
-            base_gain = BASE_GAINS_M[gain_id]
-            gain = self.adc_gains[gain_id]
-            offset = self.adc_offsets[gain_id]
-        elif self.__hw_ver == 's':
-            n = pinput
-            if ninput != 0:
-                n += 8
-            base_gain = BASE_GAINS_S[gain_id]
-            gain = self.adc_gains[n]
-            offset = self.adc_offsets[n]
-        elif self.__hw_ver == 't':
-            base_gain = BASE_GAINS_T[gain_id]
-            gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
-            offset = self.adc_offsets[pinput-1] * (2**gain_id) + self.adc_offsets[4+gain_id]
-            #print "\n[values:", raw, gain, offset,"]\n"#, " | ", BASE_GAINS_T[gain_id], self.adc_offsets[pinput-1],self.adc_offsets[4+gain_id],"\n"
-        return (raw - offset)*base_gain*gain
-
-    def __volts_to_raw(self, volts, number):
-        """Convert a value in volts to a raw value.
-        Device calibration values are used for the calculation.
-
-        openDAQ[M] range: -4.096 V to +4.096 V
-        openDAQ[S] range: 0 V to +4.096 V
-
-        Args:
-            volts: value to convert to raw
-        Returns:
-            Raw value
-        Raises:
-            ValueError: DAC voltage out of range
-        """
-        if self.__hw_ver == 'm' and not -4.096 <= volts < 4.096:
-            raise ValueError('DAC voltage out of range')
-        elif self.__hw_ver == 's' and not 0 <= volts < 4.096:
-            raise ValueError('DAC voltage out of range')
-        elif self.__hw_ver == 't' and not -1.25 <= volts < 1.25:
-            raise ValueError('DAC voltage out of range (-1.25 .. 1.25)')
-
-        if number > self.dac_slots:
-            raise ValueError('DAC calibration slot out of range')
-
-        
-        if self.__hw_ver == 'm':
-            base_gain = DAC_BASE_GAIN_M
-            offset = self.dac_offsets[number]     
-        elif self.__hw_ver == 't':
-            base_gain = DAC_BASE_GAIN_T
-            offset = self.dac_offsets[number]
-        else:
-            base_gain = DAC_BASE_GAIN_S
-            offset = self.dac_offsets[number]
-            
-        raw = int(round(volts/(self.dac_gains[number]*base_gain) + offset))
-        #print self.dac_gains, self.dac_offsets
-        print raw,"=",volts,"/(",self.dac_gains[number],"*",base_gain,") + ",offset, ")"
-        return max(-32768, min(raw, 32767))  # clamp value
-
     def set_dac(self, raw, number=1):
         """Set DAC output (raw value)
 
@@ -530,7 +635,7 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: Value out of range
         """
-        self.set_dac(self.__volts_to_raw(volts,number-1), number)
+        self.set_dac(self.model.volts_to_raw(volts,number-1), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value
@@ -547,7 +652,7 @@ class DAQ(threading.Thread):
             Voltage value
         """
         value = self.send_command(mkcmd(1, ''), 'h')[0]
-        return self.__raw_to_volts(value, self.gain, self.pinput, self.ninput)
+        return self.model.raw_to_volts(value, self.gain, self.pinput, self.ninput)
 
     def read_all(self, nsamples=20, gain=0):
         """Read data from all analog inputs
@@ -565,7 +670,7 @@ class DAQ(threading.Thread):
             raise Warning("Function not implemented in this FW. Try updating")
 
         values = self.send_command(mkcmd(4, 'BB', nsamples, gain), '8h')
-        return [self.__raw_to_volts(v, gain, i, 0) for i, v in enumerate(values)]
+        return [self.model.raw_to_volts(v, gain, i, 0) for i, v in enumerate(values)]
 
     def conf_adc(self, pinput=8, ninput=0, gain=0, nsamples=20):
         """
@@ -586,30 +691,9 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: Values out of range
         """
-        if not 1 <= pinput <= 8:
-            raise ValueError("positive input out of range")
 
-        if self.__hw_ver == 't' and not 1 <= pinput <= 4:
-            raise ValueError("positive input out of range")
-
-
-        if self.__hw_ver == 'm' and ninput not in [0, 5, 6, 7, 8, 25]:
-            raise ValueError("negative input out of range")
-
-        if self.__hw_ver == 's' and ninput != 0 and (
-            pinput % 2 == 0 and ninput != pinput - 1 or
-                pinput % 2 != 0 and ninput != pinput + 1):
-                    raise ValueError("negative input out of range")
-
-        if self.__hw_ver == 'm' and not 0 <= gain <= 4:
-            raise ValueError("gain out of range")
-
-        if self.__hw_ver == 's' and not 0 <= gain <= 7:
-            raise ValueError("gain out of range")
-
-        if self.__hw_ver == 't' and not 0 <= gain <= 7:
-            raise ValueError("gain out of range")
-
+        self.model.check_valid_adc_settings(pinput, ninput, gain)
+        
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
 
@@ -871,15 +955,14 @@ class DAQ(threading.Thread):
 
 
     def __trigger_setup(self, number, trg_mode, trg_value):
-        """Channge the trigger mode of the datachannel
+        """Change the trigger mode of the datachannel
         Args:
             number: Number of the datachannel
             trg_mode: Trigger mode of the datachannel
-        trg_value: Value of the trigger mode
+            trg_value: Value of the trigger mode
         Raises:
             Invalid number: Value out of range
-        Invalid trigger mode: Value out of range
-        Invalid trigger value: Value out of range
+            Invalid trigger mode: Value out of range
         """
 
         if not 1 <= number <= 4:
@@ -977,22 +1060,7 @@ class DAQ(threading.Thread):
             else:
                 raise ValueError('Invalid mode')
 
-        if not 0 <= pinput <= 8:
-            raise ValueError('pinput out of range')
-
-        if self.__hw_ver == 'm' and ninput not in [0, 5, 6, 7, 8, 25]:
-            raise ValueError("negative input out of range")
-
-        if self.__hw_ver == 's' and ninput != 0 and (
-            pinput % 2 == 0 and ninput != pinput - 1 or
-                pinput % 2 != 0 and ninput != pinput + 1):
-                    raise ValueError("negative input out of range")
-
-        if self.__hw_ver == 'm' and not 0 <= gain <= 4:
-            raise ValueError("gain out of range")
-
-        if self.__hw_ver == 's' and not 0 <= gain <= 7:
-            raise ValueError("gain out of range")
+        self.model.check_valid_adc_settings(pinput, ninput, gain)
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
@@ -1390,7 +1458,7 @@ class DAQ(threading.Thread):
                         for i in range(len(channel)):
                             exp = self.experiments[used.index(channel[i]+1)]
                             gain_id, pinput, ninput, _ = exp.get_parameters()
-                            exp.add_point(self.__raw_to_volts(data[i], gain_id, pinput, ninput))
+                            exp.add_point(self.model.raw_to_volts(data[i], gain_id, pinput, ninput))
 
                     elif result == 3:
                         self.halt()
