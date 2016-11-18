@@ -92,7 +92,7 @@ class DAQ(threading.Thread):
         self.ninput = 0
         self.open()
 
-        info = self.__get_info()
+        info = self.get_info()
         self.model = get_model(info[0])
         self.model.set_info(info[1],info[2])
            
@@ -310,7 +310,7 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(39, 'I', id), 'BBI')
 
 
-    def __get_info(self):
+    def get_info(self):
         """Read device configuration
 
         Returns:
@@ -1049,7 +1049,8 @@ class DAQ(threading.Thread):
         values = []
         self.set_analog(pr_data[0])
         for volts in pr_data:
-            raw = self.__volts_to_raw(volts)
+            #raw = self.__volts_to_raw(volts)
+            raw = self.model.volts_to_raw(volts,0)
             values.append(raw)
         return self.send_command(mkcmd(23, 'h%dH' % len(values),
                                        pr_of, *values), 'Bh')

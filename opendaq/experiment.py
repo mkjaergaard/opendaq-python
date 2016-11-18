@@ -26,8 +26,6 @@ class DAQExperiment:
         """
         Configure a channel for a generic stream experiment.
         """
-        if not 0 <= pinput <= 8:
-            raise ValueError('pinput out of range')
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")

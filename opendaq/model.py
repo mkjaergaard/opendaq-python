@@ -197,6 +197,7 @@ class ModelS(DAQModel):
             print "Serial number: ODS08" + str(self.serial_nb).zfill(3) + "5"
 
     def check_valid_adc_settings(self, pinput, ninput, xgain):
+        print "chequeo:", pinput, ninput, xgain
         if pinput not in self.pinput_range:
             raise ValueError("Invalid positive input selection")
         if xgain not in self.gain_range:
