@@ -31,7 +31,10 @@ class DAQModel(object):
         return self.fw_id
 
     def serial_number(self):
-        return self.serial_nb    
+        return self.serial_nb
+    
+    def adc_gain_range(self):
+        return range(len(self.adc_base_ampli))   
 
     def set_info(self, fw_ver, serial_id):
         self.fw_id = fw_ver
@@ -54,7 +57,7 @@ class DAQModel(object):
             raise ValueError("Invalid positive input selection")
         if ninput not in self.ninput_range:
             raise ValueError("Invalid negative input selection")
-        if xgain not in self.gain_range:
+        if xgain not in self.adc_gain_range():
             raise ValueError("Invalid gain selection")
 
     def volts_to_raw(self,volts,number):
@@ -80,9 +83,9 @@ class DAQModel(object):
         corr = self.dac_gains[number]
         offset = self.dac_offsets[number]
             
-        raw = int(round(volts/(corr*self.dac_base_gain) + offset))
+        raw = int(round((volts-offset)/(corr*self.dac_base_gain)))
         #print self.dac_gains, self.dac_offsets
-        print raw,"=",volts,"/(",corr,"*",self.dac_base_gain,") + ",offset, ")"
+        #print raw,"= (",volts,"-",offset,"/(",corr,"*",self.dac_base_gain,")"
         return max(-32768, min(raw, 32767))  # clamp value        
         
     def get_gains(self):
@@ -100,16 +103,16 @@ class ModelM(DAQModel):
         self.fw_id = 130
         self.serial_nb = 0
 
-        self.adc_slots = 5
+        self.adc_slots = 13
         self.adc_gains = []
         self.adc_offsets = []
-        self.adc_base_gains = [1./v*4.096/32768 for v in (1./3, 1., 2., 10., 100.)]
+        self.adc_base_ampli = [1./3, 1, 2, 10, 100]
+        self.adc_base_gain = 32768/4.096
         self.min_adc_value = -4.096
         self.max_adc_value = 4.095
 
         self.pinput_range = range(1,9)
         self.ninput_range = [0, 5, 6, 7, 8, 25]
-        self.gain_range = range(0,5)
 
         self.dac_slots = 1
         self.dac_gains = []
@@ -126,9 +129,15 @@ class ModelM(DAQModel):
             raw: Value to convert to volts
             gain_id: ID of the analog configuration setup
         """
-        base_gain = self.adc_base_gains[gain_id]
-        gain = self.adc_gains[gain_id]
-        offset = self.adc_offsets[gain_id]
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
+
+        adc_chp_slot = pinput-1
+        adc_gain_slot = len(self.pinput_range)+gain_id
+        
+        gain = 1./(self.adc_gains[adc_chp_slot] * self.adc_gains[adc_gain_slot])
+        offset = self.adc_offsets[adc_chp_slot] * self.adc_base_ampli[gain_id]\
+            + self.adc_offsets[adc_gain_slot]
+
         return (raw - offset)*base_gain*gain
 
     def device_info(self):    
@@ -151,13 +160,13 @@ class ModelS(DAQModel):
         self.adc_slots = 16
         self.adc_gains = []
         self.adc_offsets = []
-        self.adc_base_gains = [1./v*12./32768 for v in (1, 2, 4, 5, 8, 10, 16, 20)]
+        self.adc_base_ampli = [1, 2, 4, 5, 8, 10, 16, 20]
+        self.adc_base_gain = 32768/12.0
         self.min_adc_value = -12
         self.max_adc_value = 12
 
         self.pinput_range = range(1,9)
         self.ninput_range = [0]
-        self.gain_range = range(0,8)
         
         self.dac_slots = 1
         self.dac_gains = []
@@ -177,7 +186,7 @@ class ModelS(DAQModel):
         n = pinput
         if ninput != 0:
             n += 8
-        base_gain = self.adc_base_gains[gain_id]
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
         gain = self.adc_gains[n]
         offset = self.adc_offsets[n]
         return (raw - offset)*base_gain*gain
@@ -222,13 +231,13 @@ class ModelTP8(DAQModel):
         self.adc_slots = 12
         self.adc_gains = []
         self.adc_offsets = []
-        self.adc_base_gains = [1./v*23.75/32768 for v in (1, 2, 4, 8, 16, 32, 64, 128)]
+        self.adc_base_ampli = [1, 2, 4, 8, 16, 32, 64, 128]
+        self.adc_base_gain = 32768/23.75
         self.min_adc_value = -23.75
         self.max_adc_value = 23.75
 
         self.pinput_range = range(1,4)
         self.ninput_range = [0]
-        self.gain_range = range(0,8)
         
         self.dac_slots = 4
         self.dac_gains = []
@@ -245,9 +254,9 @@ class ModelTP8(DAQModel):
             raw: Value to convert to volts
             gain_id: ID of the analog configuration setup
         """        
-        base_gain = self.adc_base_gains[gain_id]
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
         gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
-        offset = self.adc_offsets[pinput-1] * (2**gain_id) + self.adc_offsets[4+gain_id]
+        offset = self.adc_offsets[pinput-1] * self.adc_base_ampli[gain_id] + self.adc_offsets[4+gain_id]
         return (raw - offset)*base_gain*gain
 
     def device_info(self):    

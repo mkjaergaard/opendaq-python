@@ -212,7 +212,7 @@ class DAQ(threading.Thread):
             _, corr, offset = self.__get_calibration(i)
             print i, ") <<", corr, offset, " (DAC)"
             gains.append(1. + corr/(1.*2**16))
-            offsets.append(offset*1./(2**7))
+            offsets.append(offset*1./(2**16))
         self.model.dac_gains = gains
         self.model.dac_offsets = offsets
         return gains, offsets
@@ -240,7 +240,7 @@ class DAQ(threading.Thread):
         self.model.adc_offsets = offsets
         return gains, offsets
 
-    def __set_calibration(self, gain_id, corr, offset):
+    def __set_calibration(self, slot_id, corr, offset):
         """
         Set device calibration
 
@@ -251,12 +251,11 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: Values out of range
         """
-        if (gain_id not in self.model.dac_coef_range()) and (gain_id not in self.model.adc_coef_range('ALL')):
+        if (slot_id not in self.model.dac_coef_range()) and (slot_id not in self.model.adc_coef_range('ALL')):
             raise ValueError("gain_id out of range")
 
-        print gain_id, ") >>",corr, offset
-        return self.send_command(mkcmd(37, 'Bhh', gain_id,
-                                       corr, offset), 'Bhh')
+        print slot_id, ") >>",corr, offset
+        return self.send_command(mkcmd(37, 'Bhh', slot_id, corr, offset), 'Bhh')
 
     def set_dac_cal(self, corrs, offsets):
         """
@@ -264,18 +263,19 @@ class DAQ(threading.Thread):
 
         Args:
             corrs: Gain corrections (0.9 to 1.1)
-            offset: Offset raw value (-32768 to 32767)
+            offset: Offset value in volts(-32768 to 32767)
         Raises:
             ValueError: Values out of range
         """
 
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
-        valuesb = [int(c*(2**7)) for c in offsets]
+        valuesb = [int(round(c*(2**16))) for c in offsets]
 
+        #print "DAC CAL:\n",corrs, "->",valuesm
+        #print offsets, "->",valuesb
+        
         for i in self.model.dac_coef_range():
             self.__set_calibration(i, valuesm[i], valuesb[i])
-
-        #self.model.dac_gains, self.model.dac_offsets = self.get_dac_cal()
 
     def set_adc_cal(self, corrs, offsets, flag='ALL'):
         """
@@ -294,27 +294,6 @@ class DAQ(threading.Thread):
 
         for i,j in enumerate(self.model.adc_coef_range(flag)):
             self.__set_calibration(j, valuesm[i], valuesb[i])
-
-        #self.model.adc_gains, self.model.adc_offsets = self.get_adc_cal()
-
-        """
-        if self.model.hw_ver() == 'm':
-            for i in range(self.model.dac_slots, self.model.dac_slots+self.model.adc_slots):
-                self.__set_calibration(i, valuesm[i-self.model.dac_slots], valuesb[i-self.model.dac_slots])
-        if self.model.hw_ver() == 't':
-            for i in range(self.model.dac_slots, self.model.dac_slots+self.model.adc_slots):
-                self.__set_calibration(i, valuesm[i-self.model.dac_slots], valuesb[i-self.model.dac_slots])
-        else:
-            if flag == 'SE':
-                for i in range(1, 9):
-                    self.__set_calibration(i, valuesm[i-1], valuesb[i-1])
-            elif flag == 'DE':
-                for i in range(9, 17):
-                    self.__set_calibration(i, valuesm[i-9], valuesb[i-9])
-            else:
-                raise ValueError("Invalid flag")
-
-        """
 
     def set_id(self, id):
         """
