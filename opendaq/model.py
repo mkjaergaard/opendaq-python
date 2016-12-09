@@ -138,7 +138,7 @@ class ModelM(DAQModel):
         offset = self.adc_offsets[adc_chp_slot] * self.adc_base_ampli[gain_id]\
             + self.adc_offsets[adc_gain_slot]
 
-        return (raw - offset)*base_gain*gain
+        return round((raw - offset)*base_gain*gain,5)
 
     def device_info(self):    
             print "Hardware Version: [M]" 
@@ -156,6 +156,8 @@ class ModelS(DAQModel):
     
     def __init__(self):
         self.model_str = 's'
+        self.fw_id = 130
+        self.serial_nb = 0
 
         self.adc_slots = 16
         self.adc_gains = []
@@ -175,7 +177,7 @@ class ModelS(DAQModel):
         self.min_dac_value = 0
         self.max_dac_value = 4.095
 
-    def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
+    def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
         """
         Convert a raw value to a value in volts.
 
@@ -183,13 +185,14 @@ class ModelS(DAQModel):
             raw: Value to convert to volts
             gain_id: ID of the analog configuration setup
         """
-        n = pinput
+        adc_chp_slot = pinput-1
         if ninput != 0:
-            n += 8
+            adc_chp_slot += 8
         base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
-        gain = self.adc_gains[n]
-        offset = self.adc_offsets[n]
-        return (raw - offset)*base_gain*gain
+        gain = self.adc_gains[adc_chp_slot]
+        offset = self.adc_offsets[adc_chp_slot]
+        #print raw, gain, offset, round(raw*base_gain,4)
+        return round((raw - offset)*base_gain/gain,4)
 
     def device_info(self):    
             print "Hardware Version: [S]" 
@@ -197,10 +200,11 @@ class ModelS(DAQModel):
             print "Serial number: ODS08" + str(self.serial_nb).zfill(3) + "5"
 
     def check_valid_adc_settings(self, pinput, ninput, xgain):
-        print "chequeo:", pinput, ninput, xgain
         if pinput not in self.pinput_range:
             raise ValueError("Invalid positive input selection")
-        if xgain not in self.gain_range:
+        if xgain not in self.adc_gain_range():
+            raise ValueError("Invalid gain selection")
+        if xgain > 0 and ninput == 0:
             raise ValueError("Invalid gain selection")
         if ninput != 0 and (pinput % 2 == 0 and ninput != pinput - 1
                             or pinput % 2 != 0 and ninput != pinput + 1):
@@ -210,7 +214,7 @@ class ModelS(DAQModel):
         if flag == 'SE':
             return range(self.dac_slots, self.dac_slots+self.adc_slots/2)
         elif flag == 'DE':
-            return range(self.dac_slots+self.adc_slots/2+1, self.dac_slots+self.adc_slots)
+            return range(self.dac_slots+self.adc_slots/2, self.dac_slots+self.adc_slots)
         elif flag == 'ALL':
             return range(self.dac_slots, self.dac_slots+self.adc_slots)
         else:

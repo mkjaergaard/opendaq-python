@@ -210,7 +210,7 @@ class DAQ(threading.Thread):
         
         for i in self.model.dac_coef_range():
             _, corr, offset = self.__get_calibration(i)
-            print i, ") <<", corr, offset, " (DAC)"
+            #print i, ") <<", corr, offset, " (DAC)"
             gains.append(1. + corr/(1.*2**16))
             offsets.append(offset*1./(2**16))
         self.model.dac_gains = gains
@@ -232,9 +232,9 @@ class DAQ(threading.Thread):
         offsets = []
         for i in self.model.adc_coef_range('ALL'):
             _, corr, offset = self.__get_calibration(i)
-            print i, ") <<", corr, offset, " (ADC)"
+            #print i, ") <<", corr, offset, " (ADC)"
             gains.append(1. + corr/(1.*(2**16)))
-            offsets.append(offset*1./(2**7))
+            offsets.append(offset*1./(2**5))
             #print "<<",i-self.model.dac_slots, "%.4f" % gains[i-self.model.dac_slots] , "%.4f" % offsets[i-self.model.dac_slots]
         self.model.adc_gains = gains
         self.model.adc_offsets = offsets
@@ -254,7 +254,7 @@ class DAQ(threading.Thread):
         if (slot_id not in self.model.dac_coef_range()) and (slot_id not in self.model.adc_coef_range('ALL')):
             raise ValueError("gain_id out of range")
 
-        print slot_id, ") >>",corr, offset
+        #print slot_id, ") >>",corr, offset
         return self.send_command(mkcmd(37, 'Bhh', slot_id, corr, offset), 'Bhh')
 
     def set_dac_cal(self, corrs, offsets):
@@ -290,7 +290,7 @@ class DAQ(threading.Thread):
         """
 
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
-        valuesb = [int(c*(2**7)) for c in offsets]
+        valuesb = [int(c*(2**5)) for c in offsets]
 
         for i,j in enumerate(self.model.adc_coef_range(flag)):
             self.__set_calibration(j, valuesm[i], valuesb[i])
@@ -371,8 +371,6 @@ class DAQ(threading.Thread):
         Raises:
             ValueError: Value out of range
         """
-        #print "dac:",int(round(raw))
-
         return self.send_command(mkcmd(13, 'hB', int(round(raw)), number), 'hB')[0]
 
     def set_analog(self, volts, number=1):
