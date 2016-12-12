@@ -456,9 +456,8 @@ class DAQ(threading.Thread):
                                        ninput, gain, nsamples), 'hBBBB')
 
     def set_led(self, color, number = 1):
-        """Choose LED status.
-        LED switch on (green, red or orange) or switch off.
-
+        """ Choose LED status.
+            LED switch on (green, red or orange) or switch off.
         Args:
             color: LED color (0:off, 1:green, 2:red, 3:orange)
         Raises:
@@ -473,48 +472,54 @@ class DAQ(threading.Thread):
 
         return self.send_command(mkcmd(18, 'BB', color, number), 'BB')[0]
 
-    def set_port_dir(self, output):
-        """Configure all PIOs directions.
-        Set the direction of all D1-D6 terminals.
+
+    def set_pio(self, number, value):
+        """ Write PIO output value
+            Set the value of the PIO terminal (0: low, 1: high).
 
         Args:
-            output: Port directions byte (bits: 0:input, 1:output)
-        Raises:
-            ValueError: output value out of range
-        """
-        if not 0 <= output < 64:
-            raise ValueError("output value out of range")
-
-        return self.send_command(mkcmd(9, 'B', output), 'B')[0]
-
-    def set_port(self, value):
-        """Write all PIO values
-        Set the value of all D1-D6 terminals.
-        Args:
-            value: Port output byte (bits: 0:low, 1:high)
+            number: PIO number
+            value: digital value (0: low, 1: high)
         Returns:
-            Real value of the port. Output pin as fixed in value\
-                input pin refresh with current state.
+            value
         Raises:
-            ValueError: port output byte out of range
+            ValueError: Invalid PIO number
         """
-        if not 0 <= value < 64:
-            raise ValueError("port output byte out of range")
+        self.model.check_valid_pio(number)
 
-        return self.send_command(mkcmd(7, 'B', value), 'B')[0]
+        if value not in [0, 1]:
+            raise ValueError("digital value out of range")
+
+        return self.send_command(mkcmd(3, 'BB', number,
+                                       int(bool(value))), 'BB')[1]
+
+
+    def read_pio(self, number):
+        """ Read PIO input value (0: low, 1: high).
+
+        Args:
+            number: PIO number
+        Returns:
+            value            
+        Raises:
+            ValueError: Invalid PIO number
+        """
+        self.model.check_valid_pio(number)
+
+        return self.send_command(mkcmd(3, 'B', number), 'BB')[1]
+
 
     def set_pio_dir(self, number, output):
-        """Configure PIO direction
-        Set the direction of a specific PIO terminal (D1-D6).
+        """ Configure PIO direction
+            Set the direction of a specific PIO terminal (D1-D6).
 
         Args:
-            number: PIO number [1:6]
+            number: PIO number 
             output: PIO direction (0 input, 1 output)
         Raises:
             ValueError: Invalid PIO number
         """
-        if not 1 <= number <= 6:
-            raise ValueError('Invalid PIO number')
+        self.model.check_valid_pio(number)
 
         if output not in [0, 1]:
             raise ValueError("PIO direction out of range")
@@ -522,24 +527,43 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(5, 'BB', number,
                                        int(bool(output))), 'BB')
 
-    def set_pio(self, number, value):
-        """Write PIO output value
-        Set the value of the PIO terminal (0: low, 1: high).
 
+    def set_port(self, value):
+        """ Write all PIO values
+            Set the value of all Dx terminals.
         Args:
-            number: PIO number (1-6)
-            value: digital value (0: low, 1: high)
+            value: Port output byte (bits: 0:low, 1:high)
+        Returns:
+            Binary value of the port. Output pin as fixed in value\
+                input pin refresh with current state.
         Raises:
-            ValueError: Invalid PIO number
+            ValueError: port output byte out of range
         """
-        if not 1 <= number <= 6:
-            raise ValueError('Invalid PIO number')
+        self.model.check_valid_port(value)
 
-        if value not in [0, 1]:
-            raise ValueError("digital value out of range")
+        return self.send_command(mkcmd(7, 'B', value), 'B')[0]
+    
+    def read_port(self):
+        """ Read all PIO values
+        Returns:
+            Binary value of the port. Output pin as fixed in value\
+                input pin refresh with current state.
+        Raises:
+            ValueError: port output byte out of range
+        """
+        return self.send_command(mkcmd(7, ''), 'B')[0]
+    
+    def set_port_dir(self, output):
+        """ Configure all PIOs directions.
+            Set the direction of all D1-D6 terminals.
+        Args:
+            output: Port directions byte (bits: 0:input, 1:output)
+        Raises:
+            ValueError: output value out of range
+        """
+        self.model.check_valid_port(output)
 
-        return self.send_command(mkcmd(3, 'BB', number,
-                                       int(bool(value))), 'BB')
+        return self.send_command(mkcmd(9, 'B', output), 'B')
 
     def spi_config(self, cpol, cpha):
         """Bit-Bang SPI configure (clock properties)

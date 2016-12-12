@@ -31,7 +31,12 @@ class DAQModel(object):
         return self.fw_id
 
     def serial_number(self):
-        return self.serial_nb
+        return self.serial_str()
+
+    def device_info(self):    
+            print "Hardware Version:", self.hw_ver() 
+            print "Firmware Version:", self.fw_ver()
+            print "Serial number:", self.serial_str()
     
     def adc_gain_range(self):
         return range(len(self.adc_base_ampli))   
@@ -48,6 +53,14 @@ class DAQModel(object):
     def adc_coef_range(self, flag):
         return range(self.dac_slots, self.dac_slots+self.adc_slots)
 
+    def check_valid_pio(self, number):
+        if not (1 <= number <= self.pio_slots):
+            raise ValueError("PIO number out of range")
+
+    def check_valid_port(self, value):
+        if not (0 <= value < 2**(self.pio_slots+1)):
+            raise ValueError("Port number out of range")
+        
     def check_valid_dac_value(self, volts):
         if not (self.min_dac_value <= volts <= self.max_dac_value):
             raise ValueError("DAC voltage out of range")
@@ -99,9 +112,10 @@ class ModelM(DAQModel):
     _id = 1
     
     def __init__(self):
-        self.model_str = 'm'
+        self.model_str = "[M]"
         self.fw_id = 130
         self.serial_nb = 0
+        self.pio_slots = 6
 
         self.adc_slots = 13
         self.adc_gains = []
@@ -120,6 +134,9 @@ class ModelM(DAQModel):
         self.dac_base_gain = 4.096/32768.
         self.min_dac_value = -4.096
         self.max_dac_value = 4.095
+
+    def serial_str(self):
+        return "ODM08" + str(self.serial_nb).zfill(3) + "6"
         
     def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
         """
@@ -140,11 +157,6 @@ class ModelM(DAQModel):
 
         return round((raw - offset)*base_gain*gain,5)
 
-    def device_info(self):    
-            print "Hardware Version: [M]" 
-            print "Firmware Version:", self.fw_id
-            print "Serial number: ODM08" + str(self.serial_nb).zfill(3) + "5"
-
     def get_gains(self):
         raise NotImplemented
 
@@ -155,9 +167,10 @@ class ModelS(DAQModel):
     _id = 2
     
     def __init__(self):
-        self.model_str = 's'
+        self.model_str = "[S]"
         self.fw_id = 130
         self.serial_nb = 0
+        self.pio_slots = 6        
 
         self.adc_slots = 16
         self.adc_gains = []
@@ -177,6 +190,9 @@ class ModelS(DAQModel):
         self.min_dac_value = 0
         self.max_dac_value = 4.095
 
+    def serial_str(self):
+        return "ODS08" + str(self.serial_nb).zfill(3) + "6"
+
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
         """
         Convert a raw value to a value in volts.
@@ -193,11 +209,6 @@ class ModelS(DAQModel):
         offset = self.adc_offsets[adc_chp_slot]
         #print raw, gain, offset, round(raw*base_gain,4)
         return round((raw - offset)*base_gain/gain,4)
-
-    def device_info(self):    
-            print "Hardware Version: [S]" 
-            print "Firmware Version:", self.fw_id
-            print "Serial number: ODS08" + str(self.serial_nb).zfill(3) + "5"
 
     def check_valid_adc_settings(self, pinput, ninput, xgain):
         if pinput not in self.pinput_range:
@@ -231,7 +242,8 @@ class ModelTP8(DAQModel):
     _id = 10
     
     def __init__(self):
-        self.model_str = 't'
+        self.model_str = "TP8x"
+        self.pio_slots = 6
         
         self.adc_slots = 12
         self.adc_gains = []
@@ -251,6 +263,9 @@ class ModelTP8(DAQModel):
         self.min_dac_value = -1.25
         self.max_dac_value = 1.25        
 
+    def serial_str(self):
+        return "TP8x10" + str(self.serial_nb).zfill(4)
+
     def raw_to_volts(self,raw, gain_id, pinput, ninput=0):
         """
         Convert a raw value to a value in volts.
@@ -264,10 +279,7 @@ class ModelTP8(DAQModel):
         offset = self.adc_offsets[pinput-1] * self.adc_base_ampli[gain_id] + self.adc_offsets[4+gain_id]
         return (raw - offset)*base_gain*gain
 
-    def device_info(self):    
-            print "Hardware Version: TP4x" 
-            print "Firmware Version:", self.fw_id
-            print "Serial number: TPX10" + str(self.serial_nb).zfill(4)
+
     
     def get_gains(self):
         raise NotImplemented
