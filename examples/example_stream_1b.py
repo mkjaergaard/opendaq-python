@@ -1,8 +1,6 @@
-"""example_stream_1b.py: creating two streams and stopping them after a number of points"""
+"""Creating two streams and stopping them after a number of points"""
 
-
-from opendaq import *
-from opendaq.daq import *
+from opendaq.daq import DAQ, ANALOG_INPUT, GAIN_S_X1
 import time
 
 # Connect to the device
@@ -17,7 +15,6 @@ stream1.analog_setup(pinput=8, gain=GAIN_S_X1)
 stream2 = dq.create_stream(ANALOG_INPUT, 300, continuous=True)
 stream2.analog_setup(pinput=7, gain=GAIN_S_X1)
 
-
 dq.start()
 
 for i in range(4):
@@ -26,4 +23,3 @@ for i in range(4):
     print "data2", stream2.read()
 
 dq.stop()
-    

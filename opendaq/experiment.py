@@ -20,9 +20,7 @@
 
 
 class DAQExperiment:
-
-    def analog_setup(
-            self, pinput=1, ninput=0, gain=1, nsamples=20):
+    def analog_setup(self, pinput=1, ninput=0, gain=1, nsamples=20):
         """
         Configure a channel for a generic stream experiment.
         """
@@ -35,25 +33,25 @@ class DAQExperiment:
         self.gain = gain
         self.nsamples = nsamples
 
-
-    def trigger_setup(self, trg_mode = 0, trg_value = 0):
-	"""Channge the trigger mode of datachannel
+    def trigger_setup(self, trg_mode=0, trg_value=0):
+        """Channge the trigger mode of datachannel
 
         Args:
-            trg_mode: Trigger mode of the datachannel
-	    trg_value: Value of the trigger mode
+            - trg_mode: Trigger mode of the datachannel
+            - trg_value: Value of the trigger mode
         Raises:
-	    Invalid trigger mode: Value out of range
-	    Invalid trigger value: Value out of range
+            - Invalid trigger mode: Value out of range
+            - Invalid trigger value: Value out of range
         """
 
-	if type(trg_mode) == int and not 0 <= trg_mode <= 6 and not trg_mode == 10 and not trg_mode == 20:
+        if (type(trg_mode) == int and not 0 <= trg_mode <= 6
+                and not trg_mode == 10 and not trg_mode == 20):
             raise ValueError('Invalid trigger mode')
-	if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
-	    raise ValueError('Invalid value of digital trigger (0,1)')
+        if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
+            raise ValueError('Invalid value of digital trigger (0,1)')
 
         self.trg_mode = trg_mode
-	self.trg_value = trg_value
+        self.trg_value = trg_value
 
     def get_parameters(self):
         """

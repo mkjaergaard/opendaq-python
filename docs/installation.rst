@@ -1,5 +1,5 @@
 Installation
-============.
+============
 
 You will need Administrator rights (superuser) to install opendaq.py.
 

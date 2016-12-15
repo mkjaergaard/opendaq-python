@@ -11,9 +11,9 @@ See ``usage.rst`` for additional info.
     :members:
     :undoc-members:
     :show-inheritance:
-	
+
 opendaq.experiment module
----------------------
+-------------------------
 Stream experiments definitions and shared methods.
 
 .. automodule:: opendaq.experiment
@@ -38,7 +38,7 @@ External experiments object creation
     :members:
     :undoc-members:
     :show-inheritance:
-	
+
 Burst Experiments
 ^^^^^^^^^^^^^^^^^
 Burst experiments object creation
@@ -47,8 +47,8 @@ Burst experiments object creation
     :members:
     :undoc-members:
     :show-inheritance:
-	
-	
+
+
 opendaq.common module
 ---------------------
 Common utils used in the rest of the modules.

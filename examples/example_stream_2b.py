@@ -1,8 +1,7 @@
-"""example_stream_2b.py: creating two streams, halting them and restarting them again"""
+"""Creating two streams, halting them and restarting them again"""
 
-from opendaq import *
-from opendaq.daq import *
 import time
+from opendaq.daq import DAQ, ANALOG_INPUT, GAIN_S_X1
 
 # Connect to the device
 dq = DAQ("COM3")  # change for the Serial port in which openDAQ is connected
@@ -37,4 +36,3 @@ for i in range(4):
     print "data2", stream2.read()
 
 dq.stop()
-    

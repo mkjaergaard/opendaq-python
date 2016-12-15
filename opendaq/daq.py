@@ -22,7 +22,8 @@ import time
 import struct
 import serial
 import threading
-from opendaq.common import check_crc, mkcmd, check_stream_crc, LengthError, CRCError
+from opendaq.common import check_crc, check_stream_crc, mkcmd
+from opendaq.common import LengthError, CRCError
 from opendaq.simulator import DAQSimulator
 from opendaq.stream import DAQStream
 from opendaq.burst import DAQBurst
@@ -59,14 +60,14 @@ GAIN_S_X10 = 5
 GAIN_S_X16 = 6
 GAIN_S_X20 = 7
 
-SW_TRG   = 0          
-DIN1_TRG = 1           
+SW_TRG = 0
+DIN1_TRG = 1
 DIN2_TRG = 2
 DIN3_TRG = 3
 DIN4_TRG = 4
 DIN5_TRG = 5
 DIN6_TRG = 6
-ABIG_TRG = 10      
+ABIG_TRG = 10
 ASML_TRG = 20
 
 
@@ -75,6 +76,7 @@ def get_model(model_id):
         if model._id == model_id:
             return model()
     raise ValueError("Unknown model ID")
+
 
 class DAQ(threading.Thread):
     def __init__(self, port, debug=False):
@@ -94,8 +96,8 @@ class DAQ(threading.Thread):
 
         info = self.get_info()
         self.model = get_model(info[0])
-        self.model.set_info(info[1],info[2])
-           
+        self.model.set_info(info[1], info[2])
+
         time.sleep(.05)
         self.get_dac_cal()
         time.sleep(.05)
@@ -105,8 +107,7 @@ class DAQ(threading.Thread):
         self.preload_data = None
 
     def open(self):
-        """Open the serial port
-        Configure serial port to be opened."""
+        """Open the serial port"""
         if self.simulate:
             self.ser = DAQSimulator(self.port, BAUDS, timeout=1)
         else:
@@ -123,9 +124,9 @@ class DAQ(threading.Thread):
         response
 
         Args:
-            cmd: Command string
-            ret_fmt: Payload format of the response using python
-            'struct' format characters
+            - cmd: Command string
+            - ret_fmt: Payload format of the response using python
+            - 'struct' format characters
         Returns:
             Command ID and arguments of the response
         Raises:
@@ -159,20 +160,18 @@ class DAQ(threading.Thread):
         # Strip 'command' and 'length' values from returned data
         return data[2:]
 
-
     def enable_crc(self, on):
         """Enable/Disable the cyclic redundancy check
 
         Args:
-            on: Enable CRC
+            - on: Enable CRC
         Raises:
-            ValueError: on value out of range
+            - ValueError: on value out of range
         """
         if on not in [0, 1]:
             raise ValueError("on value out of range")
 
         return self.send_command(mkcmd(55, 'B', on), 'B')[0]
-
 
     def __get_calibration(self, gain_id):
         """
@@ -182,17 +181,18 @@ class DAQ(threading.Thread):
         configuration
 
         Args:
-            gain_id: analog configuration
-            (0:5 for openDAQ [M])
-            (0:16 for openDAQ [S])
+            - gain_id: analog configuration
+                - (0:5 for openDAQ [M])
+                - (0:16 for openDAQ [S])
         Returns:
-            gain_id
-            Gain raw correction x100000
-            Offset raw correction (ADUs)
+            - gain_id
+            - Gain raw correction x100000
+            - Offset raw correction (ADUs)
         Raises:
             ValueError: gain_id out of range
         """
-        if (gain_id not in self.model.dac_coef_range()) and (gain_id not in self.model.adc_coef_range('ALL')):
+        if (gain_id not in self.model.dac_coef_range() and
+                gain_id not in self.model.adc_coef_range('ALL')):
             raise ValueError("gain_id out of range")
 
         return self.send_command(mkcmd(36, 'B', gain_id), 'Bhh')
@@ -202,21 +202,19 @@ class DAQ(threading.Thread):
         Read DAC calibration
 
         Returns:
-            Gain
-            Offset
+            - Gain
+            - Offset
         """
         gains = []
         offsets = []
-        
+
         for i in self.model.dac_coef_range():
             _, corr, offset = self.__get_calibration(i)
-            #print i, ") <<", corr, offset, " (DAC)"
             gains.append(1. + corr/(1.*2**16))
             offsets.append(offset*1./(2**16))
         self.model.dac_gains = gains
         self.model.dac_offsets = offsets
         return gains, offsets
-
 
     def get_adc_cal(self):
         """
@@ -225,17 +223,15 @@ class DAQ(threading.Thread):
         Gets calibration values for all the available device configurations
 
         Returns:
-            Gain corrections (0.9 to 1.1)
-            Offsets (ADUs)
+            - Gain corrections (0.9 to 1.1)
+            - Offsets (ADUs)
         """
         gains = []
         offsets = []
         for i in self.model.adc_coef_range('ALL'):
             _, corr, offset = self.__get_calibration(i)
-            #print i, ") <<", corr, offset, " (ADC)"
             gains.append(1. + corr/(1.*(2**16)))
             offsets.append(offset*1./(2**5))
-            #print "<<",i-self.model.dac_slots, "%.4f" % gains[i-self.model.dac_slots] , "%.4f" % offsets[i-self.model.dac_slots]
         self.model.adc_gains = gains
         self.model.adc_offsets = offsets
         return gains, offsets
@@ -245,16 +241,16 @@ class DAQ(threading.Thread):
         Set device calibration
 
         Args:
-            gain_id: ID of the analog configuration setup
-            corr: Gain correction: G = Gbase*(1 + corr/100000)
-            offset: Offset raw value (-32768 to 32767)
+            - gain_id: ID of the analog configuration setup
+            - corr: Gain correction: G = Gbase*(1 + corr/100000)
+            - offset: Offset raw value (-32768 to 32767)
         Raises:
-            ValueError: Values out of range
+            - ValueError: Values out of range
         """
-        if (slot_id not in self.model.dac_coef_range()) and (slot_id not in self.model.adc_coef_range('ALL')):
+        if (slot_id not in self.model.dac_coef_range() and
+                slot_id not in self.model.adc_coef_range('ALL')):
             raise ValueError("gain_id out of range")
 
-        #print slot_id, ") >>",corr, offset
         return self.send_command(mkcmd(37, 'Bhh', slot_id, corr, offset), 'Bhh')
 
     def set_dac_cal(self, corrs, offsets):
@@ -262,18 +258,15 @@ class DAQ(threading.Thread):
         Set DAC calibration
 
         Args:
-            corrs: Gain corrections (0.9 to 1.1)
-            offset: Offset value in volts(-32768 to 32767)
+            - corrs: Gain corrections (0.9 to 1.1)
+            - offset: Offset value in volts(-32768 to 32767)
         Raises:
-            ValueError: Values out of range
+            - ValueError: Values out of range
         """
 
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
         valuesb = [int(round(c*(2**16))) for c in offsets]
 
-        #print "DAC CAL:\n",corrs, "->",valuesm
-        #print offsets, "->",valuesb
-        
         for i in self.model.dac_coef_range():
             self.__set_calibration(i, valuesm[i], valuesb[i])
 
@@ -282,17 +275,17 @@ class DAQ(threading.Thread):
         Set device calibration
 
         Args:
-            corrs: Gain corrections (0.9 to 1.1)
-            offsets: Offset raw value (-32768 to 32767)
-            flag: 'ALL', 'SE' or 'DE' (only for 'S' model)
+            - corrs: Gain corrections (0.9 to 1.1)
+            - offsets: Offset raw value (-32768 to 32767)
+            - flag: 'ALL', 'SE' or 'DE' (only for 'S' model)
         Raises:
-            ValueError: Values out of range
+            - ValueError: Values out of range
         """
 
         valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
         valuesb = [int(c*(2**5)) for c in offsets]
 
-        for i,j in enumerate(self.model.adc_coef_range(flag)):
+        for i, j in enumerate(self.model.adc_coef_range(flag)):
             self.__set_calibration(j, valuesm[i], valuesb[i])
 
     def set_id(self, id):
@@ -300,21 +293,20 @@ class DAQ(threading.Thread):
         Identify openDAQ device
 
         Args:
-            id: id number of the device [000:999]
+            - id: id number of the device [000:999]
         Raises:
-            ValueError: id out of range
+            - ValueError: id out of range
         """
         if not 0 <= id < 1000:
             raise ValueError('id out of range')
 
         return self.send_command(mkcmd(39, 'I', id), 'BBI')
 
-
     def get_info(self):
         """Read device configuration
 
         Returns:
-            [hardware version, firmware version, device ID number]
+            - [hardware version, firmware version, device ID number]
         """
         return self.send_command(mkcmd(39, ''), 'BBI')
 
@@ -336,10 +328,10 @@ class DAQ(threading.Thread):
         read a byte from eeprom
 
         Args:
-            val: value to write
-            pos: position in memory
+            - val: value to write
+            - pos: position in memory
         Raises:
-            ValueError: id out of range
+            - ValueError: id out of range
         """
         if not 0 <= pos < 254:
             raise ValueError('pos out of range')
@@ -351,14 +343,13 @@ class DAQ(threading.Thread):
         write a byte in eeprom
 
         Args:
-            id: id number of the device [000:999]
+            - id: id number of the device [000:999]
         Raises:
-            ValueError: id out of range
+            - ValueError: id out of range
         """
         if not 0 <= pos < 254:
             raise ValueError('pos out of range')
 
-        #print "write eeprom:" , pos , val
         return self.send_command(mkcmd(30, 'BBB', pos, 1, val), 'BBB')
 
     def set_dac(self, raw, number=1):
@@ -367,9 +358,9 @@ class DAQ(threading.Thread):
         Set the raw value of the DAC.
 
         Args:
-            raw: Raw ADC value
+            - raw: Raw ADC value
         Raises:
-            ValueError: Value out of range
+            - ValueError: Value out of range
         """
         return self.send_command(mkcmd(13, 'hB', int(round(raw)), number), 'hB')[0]
 
@@ -379,20 +370,21 @@ class DAQ(threading.Thread):
         into account.
 
         openDAQ[M] range: -4.096 V to +4.096 V
+
         openDAQ[S] range: 0 V to +4.096 V
 
         Args:
-            volts: DAC output value in volts
+            - volts: DAC output value in volts
         Raises:
-            ValueError: Value out of range
+            - ValueError: Value out of range
         """
-        self.set_dac(self.model.volts_to_raw(volts,number-1), number)
+        self.set_dac(self.model.volts_to_raw(volts, number-1), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value
 
         Returns:
-            Raw ADC value
+            - Raw ADC value
         """
         return self.send_command(mkcmd(1, ''), 'h')[0]
 
@@ -400,7 +392,7 @@ class DAQ(threading.Thread):
         """Read data from ADC in volts
 
         Returns:
-            Voltage value
+            - Voltage value
         """
         value = self.send_command(mkcmd(1, ''), 'h')[0]
         return self.model.raw_to_volts(value, self.gain, self.pinput, self.ninput)
@@ -409,13 +401,12 @@ class DAQ(threading.Thread):
         """Read data from all analog inputs
 
         Args:
-            nsamples: Number of samples per data point [0-255] (default=20)
-            gain: Analog gain
-                openDAQ[M]= [0:4] (x1/3, x1, x2, x10, x100)
-                openDAQ[S]= [0:7] (x1,x2,x4,x5,x8,x10,x16,x20)
-                (default=1)
+            - nsamples: Number of samples per data point [0-255] (default=20)
+            - gain: Analog gain (default=1)
+                - openDAQ[M]= [0:4] (x1/3, x1, x2, x10, x100)
+                - openDAQ[S]= [0:7] (x1,x2,x4,x5,x8,x10,x16,x20)
         Returns:
-            Values[0:7]: List of the analog reading on each input
+            - Values[0:7]: List of the analog reading on each input
         """
         if self.fw_ver() < 120:
             raise Warning("Function not implemented in this FW. Try updating")
@@ -427,24 +418,23 @@ class DAQ(threading.Thread):
         """
         Configure the analog-to-digital converter.
 
-        Get the parameters for configure the analog-to-digital
-        converter.
+        Get the parameters for configure the analog-to-digital converter.
 
         Args:
-            pinput: Positive input [1:8]
-            ninput: Negative input
-                openDAQ[M]= [0, 5, 6, 7, 8, 25]
-                openDAQ[S]= [0,1:8] (must be 0 or pinput-1)
-            gain: Analog gain
-                openDAQ[M]= [0:4] (x1/3, x1, x2, x10, x100)
-                openDAQ[S]= [0:7] (x1,x2,x4,x5,x8,x10,x16,x20)
-            nsamples: Number of samples per data point [0-255)
+            - pinput: Positive input [1:8]
+            - ninput: Negative input
+                - openDAQ[M]= [0, 5, 6, 7, 8, 25]
+                - openDAQ[S]= [0,1:8] (must be 0 or pinput-1)
+            - gain: Analog gain
+                - openDAQ[M]= [0:4] (x1/3, x1, x2, x10, x100)
+                - openDAQ[S]= [0:7] (x1,x2,x4,x5,x8,x10,x16,x20)
+            - nsamples: Number of samples per data point [0-255)
         Raises:
-            ValueError: Values out of range
+            - ValueError: Values out of range
         """
 
         self.model.check_valid_adc_settings(pinput, ninput, gain)
-        
+
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
 
@@ -455,13 +445,13 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(2, 'BBBB', pinput,
                                        ninput, gain, nsamples), 'hBBBB')
 
-    def set_led(self, color, number = 1):
+    def set_led(self, color, number=1):
         """ Choose LED status.
             LED switch on (green, red or orange) or switch off.
         Args:
-            color: LED color (0:off, 1:green, 2:red, 3:orange)
+            - color: LED color (0:off, 1:green, 2:red, 3:orange)
         Raises:
-            ValueError: Invalid color number
+            - ValueError: Invalid color number
         """
         if not 0 <= color <= 3:
             raise ValueError('Invalid color number')
@@ -469,21 +459,19 @@ class DAQ(threading.Thread):
         if not 1 <= number <= 4:
             raise ValueError('Invalid led number')
 
-
         return self.send_command(mkcmd(18, 'BB', color, number), 'BB')[0]
-
 
     def set_pio(self, number, value):
         """ Write PIO output value
             Set the value of the PIO terminal (0: low, 1: high).
 
         Args:
-            number: PIO number
-            value: digital value (0: low, 1: high)
+            - number: PIO number
+            - value: digital value (0: low, 1: high)
         Returns:
-            value
+            - value
         Raises:
-            ValueError: Invalid PIO number
+            - ValueError: Invalid PIO number
         """
         self.model.check_valid_pio(number)
 
@@ -493,31 +481,29 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(3, 'BB', number,
                                        int(bool(value))), 'BB')[1]
 
-
     def read_pio(self, number):
         """ Read PIO input value (0: low, 1: high).
 
         Args:
-            number: PIO number
+            - number: PIO number
         Returns:
-            value            
+            - value
         Raises:
-            ValueError: Invalid PIO number
+            - ValueError: Invalid PIO number
         """
         self.model.check_valid_pio(number)
 
         return self.send_command(mkcmd(3, 'B', number), 'BB')[1]
-
 
     def set_pio_dir(self, number, output):
         """ Configure PIO direction
             Set the direction of a specific PIO terminal (D1-D6).
 
         Args:
-            number: PIO number 
-            output: PIO direction (0 input, 1 output)
+            - number: PIO number
+            - output: PIO direction (0 input, 1 output)
         Raises:
-            ValueError: Invalid PIO number
+            - ValueError: Invalid PIO number
         """
         self.model.check_valid_pio(number)
 
@@ -527,39 +513,39 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(5, 'BB', number,
                                        int(bool(output))), 'BB')
 
-
     def set_port(self, value):
         """ Write all PIO values
             Set the value of all Dx terminals.
+
         Args:
-            value: Port output byte (bits: 0:low, 1:high)
+            - value: Port output byte (bits: 0:low, 1:high)
         Returns:
-            Binary value of the port. Output pin as fixed in value\
-                input pin refresh with current state.
+            - Binary value of the port
         Raises:
-            ValueError: port output byte out of range
+            - ValueError: port output byte out of range
         """
         self.model.check_valid_port(value)
 
         return self.send_command(mkcmd(7, 'B', value), 'B')[0]
-    
+
     def read_port(self):
         """ Read all PIO values
+
         Returns:
-            Binary value of the port. Output pin as fixed in value\
-                input pin refresh with current state.
+            - Binary value of the port
         Raises:
-            ValueError: port output byte out of range
+            - ValueError: port output byte out of range
         """
         return self.send_command(mkcmd(7, ''), 'B')[0]
-    
+
     def set_port_dir(self, output):
         """ Configure all PIOs directions.
             Set the direction of all D1-D6 terminals.
+
         Args:
-            output: Port directions byte (bits: 0:input, 1:output)
+            - output: Port directions byte (bits: 0:input, 1:output)
         Raises:
-            ValueError: output value out of range
+            - ValueError: output value out of range
         """
         self.model.check_valid_port(output)
 
@@ -569,10 +555,10 @@ class DAQ(threading.Thread):
         """Bit-Bang SPI configure (clock properties)
 
         Args:
-            cpol: Clock polarity (clock pin state when inactive)
-            cpha: Clock phase (leading 0, or trailing 1 edges read)
+            - cpol: Clock polarity (clock pin state when inactive)
+            - cpha: Clock phase (leading 0, or trailing 1 edges read)
         Raises:
-            ValueError: Invalid spisw_config values
+            - ValueError: Invalid spisw_config values
         """
         if not 0 <= cpol <= 1 or not 0 <= cpha <= 1:
             raise ValueError('Invalid spisw_config values')
@@ -583,12 +569,12 @@ class DAQ(threading.Thread):
         """Bit-Bang SPI setup (PIO numbers to use)
 
         Args:
-            nbytes: Number of bytes
-            sck: Clock pin
-            mosi: MOSI pin (master out / slave in)
-            miso: MISO pin (master in / slave out)
+            - nbytes: Number of bytes
+            - sck: Clock pin
+            - mosi: MOSI pin (master out / slave in)
+            - miso: MISO pin (master in / slave out)
         Raises:
-            ValueError: Invalid values
+            - ValueError: Invalid values
         """
         if not 0 <= nbytes <= 3:
             raise ValueError('Invalid number of bytes')
@@ -601,10 +587,10 @@ class DAQ(threading.Thread):
         """Bit-bang SPI transfer (send+receive) a byte or a word
 
         Args:
-            value: Data to send (byte/word to transmit)
-            word: send a 2-byte word, instead of a byte
+            - value: Data to send (byte/word to transmit)
+            - word: send a 2-byte word, instead of a byte
         Raises:
-            ValueError: Value out of range
+            - ValueError: Value out of range
         """
         if not 0 <= value <= 65535:
             raise ValueError("value out of range")
@@ -619,10 +605,11 @@ class DAQ(threading.Thread):
         """Initialize the edge Counter
         Configure which edge increments the count:
         Low-to-High (1) or High-to-Low (0).
+
         Args:
-            edge: high-to-low (0) or low-to-high (1)
+            - edge: high-to-low (0) or low-to-high (1)
         Raises:
-            ValueError: edge value out of range
+            - ValueError: edge value out of range
         """
         if edge not in [0, 1]:
             raise ValueError("edge value out of range")
@@ -633,9 +620,9 @@ class DAQ(threading.Thread):
         """Get the counter value
 
         Args:
-            reset: reset the counter after perform reading (>0: reset)
+            - reset: reset the counter after perform reading (>0: reset)
         Raises:
-            ValueError: reset value out of range
+            - ValueError: reset value out of range
         """
         if not 0 <= reset <= 255:
             raise ValueError("reset value out of range")
@@ -646,9 +633,9 @@ class DAQ(threading.Thread):
         """Start Capture mode around a given period
 
         Args:
-            period: estimated period of the wave (in microseconds)
+            - period: estimated period of the wave (in microseconds)
         Raises:
-            ValueError: period out of range
+            - ValueError: period out of range
         """
         if not 0 <= period <= 2**32:
             raise ValueError("Period value out of range")
@@ -663,16 +650,17 @@ class DAQ(threading.Thread):
     def get_capture(self, mode):
         """Get Capture reading for the period length
         Low cycle, High cycle or Full period.
+
         Args:
-            mode: Period length
-                0: Low cycle
-                1: High cycle
-                2: Full period
+            - mode: Period length
+                - 0: Low cycle
+                - 1: High cycle
+                - 2: Full period
         Returns:
-            mode
-            Period: The period length in microseconds
+            - mode
+            - Period: The period length in microseconds
         Raises:
-            ValueError: mode value out of range
+            - ValueError: mode value out of range
         """
         if mode not in [0, 1, 2]:
             raise ValueError("mode value out of range")
@@ -683,9 +671,9 @@ class DAQ(threading.Thread):
         """Start Encoder function
 
         Args:
-            resolution: Maximum number of ticks per round [0:65535]
+            - resolution: Maximum number of ticks per round [0:65535]
         Raises:
-            ValueError: resolution value out of range
+            - ValueError: resolution value out of range
         """
         if not 0 <= resolution <= 2**32:
             raise ValueError("resolution value out of range")
@@ -696,7 +684,7 @@ class DAQ(threading.Thread):
         """Get current encoder relative position
 
         Returns:
-            Position: The actual encoder value.
+            - Position: The actual encoder value.
         """
         return self.send_command(mkcmd(52, ''), 'I')[0]
 
@@ -708,11 +696,11 @@ class DAQ(threading.Thread):
         """Start PWM output with a given period and duty cycle
 
         Args:
-            duty: High time of the signal [0:1023](0 always low,\
-                 1023 always high)
-            period: Period of the signal (microseconds) [0:65535]
+            - duty: High time of the signal [0:1023](0 always low, 1023 always
+              high)
+            - period: Period of the signal (microseconds) [0:65535]
         Raises:
-            ValueError: Values out of range
+            - ValueError: Values out of range
         """
         if not 0 <= duty < 1024:
             raise ValueError("duty value out of range")
@@ -726,24 +714,22 @@ class DAQ(threading.Thread):
         """Stop PWM"""
         self.send_command(mkcmd(11, ''), '')
 
-
-
-
     def __trigger_setup(self, number, trg_mode, trg_value):
         """Change the trigger mode of the datachannel
         Args:
-            number: Number of the datachannel
-            trg_mode: Trigger mode of the datachannel
-            trg_value: Value of the trigger mode
+            - number: Number of the datachannel
+            - trg_mode: Trigger mode of the datachannel
+            - trg_value: Value of the trigger mode
         Raises:
-            Invalid number: Value out of range
-            Invalid trigger mode: Value out of range
+            - Invalid number: Value out of range
+            - Invalid trigger mode: Value out of range
         """
 
         if not 1 <= number <= 4:
                 raise ValueError('Invalid number')
 
-        if type(trg_mode) == int and not 0 <= trg_mode <= 6 and not trg_mode == 10 and not trg_mode == 20:
+        if (type(trg_mode) == int and not 0 <= trg_mode <= 6
+                and not trg_mode == 10 and not trg_mode == 20):
                 raise ValueError('Invalid trigger mode')
 
         if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
@@ -755,9 +741,9 @@ class DAQ(threading.Thread):
         """Get the trigger mode of the datachannel
 
         Args:
-            number: Number of the datachannel
+            - number: Number of the datachannel
         Raises:
-            Invalid number: Value out of range
+            - Invalid number: Value out of range
         """
 
         if not 1 <= number <= 4:
@@ -769,9 +755,9 @@ class DAQ(threading.Thread):
         """Get state of the datachannel
 
         Args:
-            number: Number of the datachannel
+            - number: Number of the datachannel
         Raises:
-            Invalid number: Value out of range
+            - Invalid number: Value out of range
         """
 
         if not 1 <= number <= 4:
@@ -779,8 +765,8 @@ class DAQ(threading.Thread):
 
         return self.send_command(mkcmd(35, 'B', number), 'H')[0]
 
-    def __conf_channel(
-            self, number, mode, pinput=1, ninput=0, gain=1, nsamples=1):
+    def __conf_channel(self, number, mode, pinput=1, ninput=0, gain=1,
+                       nsamples=1):
         """
         Configure a channel for a generic stream experiment.
         (Stream/External/Burst).
@@ -886,9 +872,6 @@ class DAQ(threading.Thread):
     def clear_experiments(self):
         """
         Delete the whole experiment list
-
-        Args:
-            None
         """
         for i in range(len(self.experiments))[::-1]:
             self.__destroy_channel(i+1)
@@ -898,8 +881,6 @@ class DAQ(threading.Thread):
         """
         Check which internal DataChannels are used or available
 
-        Args:
-            None
         Returns:
             available: list of free DataChannels
             used: list of asigned DataChannels
@@ -921,7 +902,6 @@ class DAQ(threading.Thread):
                 raise ValueError('Invalid number')
 
         self.send_command(mkcmd(45, 'B', number), 'B')
-
 
     def __destroy_channel(self, number):
         """
@@ -1071,8 +1051,7 @@ class DAQ(threading.Thread):
         values = []
         self.set_analog(pr_data[0])
         for volts in pr_data:
-            #raw = self.__volts_to_raw(volts)
-            raw = self.model.volts_to_raw(volts,0)
+            raw = self.model.volts_to_raw(volts, 0)
             values.append(raw)
         return self.send_command(mkcmd(23, 'h%dH' % len(values),
                                        pr_of, *values), 'Bh')
@@ -1086,7 +1065,8 @@ class DAQ(threading.Thread):
     def get_stream(self, data, channel):
         """
         Serial parser.
-        Low-level function for stream data collecting. 
+        Low-level function for stream data collecting.
+
         Args:
             data: Buffer for data points
             channel: Buffer for assigned experiment number
@@ -1169,7 +1149,7 @@ class DAQ(threading.Thread):
                 for i in range(len(pr_offset)):
                     self.__load_signal(pr_offset[i], pr_data[i])
                 break
-    
+
         self.send_command(mkcmd(64, ''), '')
 
         if not self.__running:
@@ -1199,8 +1179,9 @@ class DAQ(threading.Thread):
 
     def halt(self, clear=False):
         """
-        Stop running experiments but keep threads active 
+        Stop running experiments but keep threads active
         to start new experiments
+
         Args:
             clear - Clear experiment list
         """
@@ -1218,8 +1199,8 @@ class DAQ(threading.Thread):
 
     def run(self):
         """
-        Thread code. 
-        The procedure stores the experiment data automatically sent 
+        Thread code.
+        The procedure stores the experiment data automatically sent
         from the device after start()
         """
         while True:
