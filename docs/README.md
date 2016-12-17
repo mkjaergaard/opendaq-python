@@ -37,14 +37,14 @@ Set an output voltage (CR Mode):
 Configure an analog input and read back the voltage:
 
 ```python
-    $ daq.conf_adc(pinput=8,ninput=0,gain=1,nsamples=20)
+    $ daq.conf_adc(pinput=8,ninput=0,gain=1)
     $ daq.read_analog()
 ```
 
 ## Stream Mode:
 
-Create a new Experiment, Stream type, with a 100ms period, not-continuous
-mode::
+Create a new Experiment, Stream type, with a 100 milliseconds period, not-continuous
+mode, 30 total points::
 
 ```python
     $ stream_exp =  daq.create_stream(ANALOG_INPUT, 100, npoints=30)
@@ -56,7 +56,7 @@ Configure the experiment to read from A8 as SE input, gain x1)::
     $ stream_exp.analog_setup(pinput=8, gain=GAIN_S_X1)
 ```
 
-Start the experiments::
+Start the experiment(s)::
 
 ```python
     $ daq.start()
@@ -71,5 +71,5 @@ Keep receiving measured data until it has ended reading all the points::
 ```
 
 ** See usage.rst to read documentation about the library. **
-There are some helpful examples in this repository to help you understanding
-the syntaxis.
+There are some basic examples included in this repository (see /examples folder) to help you 
+understanding the syntaxis.

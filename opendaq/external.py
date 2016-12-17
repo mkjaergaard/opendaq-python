@@ -24,30 +24,30 @@ from threading import Lock
 
 
 class DAQExternal(DAQExperiment):
+    """
+    Args:
+        - mode: Define data source or destination [0:5]:
+            0) ANALOG_INPUT
+            1) ANALOG_OUTPUT
+            2) DIGITAL_INPUT
+            3) DIGITAL_OUTPUT
+            4) COUNTER_INPUT
+            5) CAPTURE_INPUT
+        - clock_input: Digital input used as external clock
+        - edge: New data on rising (1) or falling (0) edges [0:1]
+        - npoints: Total number of points for the experiment
+        [0:65536]
+        - continuous: Indicates if experiment is continuous
+            - False: run once
+            - True: continuous
+        - buffersize: Buffer size
+    Raises:
+        - LengthError: Too many experiments at the same time
+        - ValueError: Values out of range
+    """
     def __init__(self, mode, clock_input, edge=1,
                  npoints=10, continuous=False, buffersize=1000):
-        """
-        Class constructor
-        Args:
-            mode: Define data source or destination [0:5]:
-                0) ANALOG_INPUT
-                1) ANALOG_OUTPUT
-                2) DIGITAL_INPUT
-                3) DIGITAL_OUTPUT
-                4) COUNTER_INPUT
-                5) CAPTURE_INPUT
-            clock_input: Digital input used as external clock
-            edge: New data on rising (1) or falling (0) edges [0:1]
-            npoints: Total number of points for the experiment
-            [0:65536]
-            continuous: Indicates if experiment is continuous
-                False run once
-                True continuous
-            buffersize: Buffer size
-        Raises:
-            LengthError: Too many experiments at the same time
-            ValueError: Values out of range
-        """
+
         if not 1 <= clock_input <= 4:
             raise ValueError('Invalid clock_input')
 

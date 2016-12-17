@@ -12,6 +12,16 @@ See ``usage.rst`` for additional info.
     :undoc-members:
     :show-inheritance:
 
+opendaq.model module
+------------------
+Specific parameters and functions depending on device's model.
+
+.. automodule:: opendaq.model
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
 opendaq.experiment module
 -------------------------
 Stream experiments definitions and shared methods.

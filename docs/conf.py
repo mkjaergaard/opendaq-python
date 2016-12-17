@@ -58,7 +58,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'openDAQ'
-copyright = u'2015, Juan Menendez and Jose Ramón Blanco'
+copyright = u'2016, Juan Menendez and Jose Ramón Blanco'
 
 
 # The version info for the project you're documenting, acts as replacement for
