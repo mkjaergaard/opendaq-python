@@ -26,7 +26,7 @@ with open(filename, 'r+') as f:
             y.append(a[1])
 
 new_corr, new_offset = np.polyfit(x, y, 1)
-print new_corr, new_offset
+
 
 		
 dq = DAQ("COM3")
@@ -70,7 +70,6 @@ print "\n------------------------------\n"
 print "Load DAC calibration from file:"
 
 dac_corr, dac_offset = dq.get_dac_cal()
-print new_corr, new_offset
 
 dac_corr[channel] *= new_corr
 dac_offset[channel] += new_offset 
@@ -80,7 +79,8 @@ dq.get_dac_cal()
 
 outputfile.write("DAC:\nm=%1.3f\n"%new_corr)
 outputfile.write("b=%1.3f\r\n"%new_offset)
-
+print "DAC:\nm=%1.3f\n"%new_corr
+print "b=%1.3f\r\n"%new_offset
 
 
 
@@ -101,14 +101,15 @@ for canal in dq.model.pinput_range:
     for i in dq.model.adc_gain_range():
         gain = i
         dq.conf_adc(canal,0,gain)
+        dq.read_adc()
         time.sleep(0.05)
         a.append(dq.model.adc_base_ampli[i])
         b.append(dq.read_adc())
         c.append(dq.read_analog())
-        print i, a[i], b[i], "%0.4f"%c[i]
+        print "x%0.2f"%a[i], b[i], "%0.4f"%c[i]
 
     new_corr, new_offset = np.polyfit(a, b, 1)
-    print "%0.2f"%new_corr, "%0.2f"%new_offset
+    print "\r\n%0.2f"%new_corr, "%0.2f"%new_offset
     offsets_chp.append(new_offset)
     temp.append(new_corr)
 
@@ -125,8 +126,25 @@ print "\n------------------------------\n"
 print "ADC CALIBRATION - Gain calculation:\n"
 
 gains_chp = []
-gains_ampli = [1]*len(dq.model.pinput_range)
+gains_ampli = [1]*len(dq.model.adc_gain_range())
 
+dq.set_analog(1)
+for i in dq.model.pinput_range:
+    dq.conf_adc(i,0,1)
+    dq.read_adc()
+    time.sleep(0.05)
+    value = dq.read_analog()
+    if i==6:
+        value = 1
+    gains_chp.append(value)
+    print i,"-->", "%0.4f"%value 
+
+adc_corrs = gains_chp + gains_ampli
+print adc_corrs
+dq.set_adc_cal(adc_corrs, adc_offsets)
+dq.get_adc_cal()
+
+gains_ampli = []
 for ampli in dq.model.adc_gain_range():
     print "\nGain range",ampli, "-> x", "%0.2f"%dq.model.adc_base_ampli[ampli], "\n"
     volts = 1./dq.model.adc_base_ampli[ampli]
@@ -135,28 +153,32 @@ for ampli in dq.model.adc_gain_range():
     a = []
     for i in dq.model.pinput_range:
         dq.conf_adc(i,0,ampli)
+        dq.read_adc()
         time.sleep(0.05)
         raw = dq.read_adc()
         value = dq.read_analog()
         a.append(value/volts)
         print i, raw, "-->", "%0.4f"%value, "##", "%0.4f"%(value/volts)
-    gains_chp.append(np.mean(a))
+    gains_ampli.append(np.mean(a))
 
-print gains_chp
+print gains_ampli
 
-adc_corrs = gains_ampli + gains_chp
-
+adc_corrs = gains_chp + gains_ampli
+print adc_corrs
 dq.set_adc_cal(adc_corrs, adc_offsets)
 
 adc_corrs, adc_offsets = dq.get_adc_cal()
 
-outputfile.write("ADC calibration:\nm= [")
-for i in dq.model.adc_slots:
+print "ADC calibration:\nm= ", adc_corrs, "\n"
+print "b= ", adc_offsets, "\n"
+
+outputfile.write("\r\nADC calibration:\nm= [")
+for i in range(dq.model.adc_slots):
     outputfile.write("%1.4f "%adc_corrs[i])
 outputfile.write("]\nb= [")
-for i in dq.model.adc_slots:
+for i in range(dq.model.adc_slots):
     outputfile.write("%1.1f "%adc_offsets[i])
-outputfile.write("]\r\n") 
+outputfile.write("]\r\n")
 
     
 print "\n------------------------------\n"
@@ -166,19 +188,20 @@ outputfile.write("CALIBRATION TEST:\n")
 
 for ampli in dq.model.adc_gain_range():
     print "\nGain range:",ampli, "-> x", "%0.2f"%dq.model.adc_base_ampli[ampli], "\n"
-    outputfile.write("\nGain range:"%ampli)
+    outputfile.write("\nGain range: x%0.2f\n"%dq.model.adc_base_ampli[ampli])
     volts = 1./dq.model.adc_base_ampli[ampli]
     print "%0.2f"%volts, "Volts -->\n"
     dq.set_analog(volts)
     for i in dq.model.pinput_range:
         dq.conf_adc(i,0,ampli)
+        dq.read_adc()
         time.sleep(0.05)
         value = dq.read_analog()
         print i, "-->", "%0.4f"%value, "## Error:","%0.2f"%(abs(100*(value-volts)/volts)),"%"
         outputfile.write("\nA%d:\n"%i)
         outputfile.write("%1.1f V set --> "%volts)
         outputfile.write("%1.3f V read ## Error:"%value)
-        outputfile.write("%0.2f%%\n"%(abs(100*(value-j)/12.))
+        outputfile.write("%0.2f%%\n"%(abs(100*(value-volts)/12.)))
 
 print "\nPIO TEST:\r\n"
 outputfile.write("\nPIO TEST:\r\n")

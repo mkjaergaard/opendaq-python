@@ -152,6 +152,15 @@ class ModelM(DAQModel):
                   self.adc_base_ampli[gain_id] +
                   self.adc_offsets[adc_gain_slot])
 
+        """
+        print raw
+        print adc_chp_slot, adc_gain_slot
+        print self.adc_gains[adc_chp_slot],self.adc_gains[adc_gain_slot]
+        print self.adc_offsets[adc_chp_slot] * self.adc_base_ampli[gain_id]
+        print self.adc_offsets[adc_gain_slot]
+        print "\n",1./gain
+        print offset
+        """
         return round((raw - offset)*base_gain*gain, 5)
 
     def get_gains(self):
