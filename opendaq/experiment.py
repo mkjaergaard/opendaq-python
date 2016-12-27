@@ -19,12 +19,10 @@
 # along with opendaq.  If not, see <http://www.gnu.org/licenses/>.
 
 
-class DAQExperiment:
+class DAQExperiment(object):
     def analog_setup(self, pinput=1, ninput=0, gain=1, nsamples=20):
+        """Configure a channel for a generic stream experiment.
         """
-        Configure a channel for a generic stream experiment.
-        """
-
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
 
@@ -34,14 +32,11 @@ class DAQExperiment:
         self.nsamples = nsamples
 
     def trigger_setup(self, trg_mode=0, trg_value=0):
-        """Channge the trigger mode of datachannel
+        """Channge the trigger mode of datachannel.
 
-        Args:
-            - trg_mode: Trigger mode of the datachannel
-            - trg_value: Value of the trigger mode
-        Raises:
-            - Invalid trigger mode: Value out of range
-            - Invalid trigger value: Value out of range
+        :param trg_mode: Trigger mode of the datachannel.
+        :param trg_value: Value of the trigger mode.
+        :raises: ValueError
         """
 
         if (type(trg_mode) == int and not 0 <= trg_mode <= 6
@@ -54,25 +49,18 @@ class DAQExperiment:
         self.trg_value = trg_value
 
     def get_parameters(self):
-        """
-        Return gain, pinput and ninput
-        """
+        """Return gain, pinput and ninput."""
         return self.gain, self.pinput, self.ninput, self.number
 
     def get_mode(self):
-        """
-        Return mode
-        """
+        """Return mode."""
         return self.mode
 
     def get_preload_data(self):
-        """
-        Return preload_data and preload_offset
-        """
+        """Return preload_data and preload_offset. """
         return self.preload_data, self.preload_offset
 
     def load_signal(self, data, offset=0, clear=False):
-
         if not 1 <= len(data) <= 400:
             raise ValueError('Invalid data length')
 
@@ -84,17 +72,13 @@ class DAQExperiment:
         self.preload_offset.append(offset)
 
     def add_point(self, point):
-        """
-        Write a single point into the ring buffer
-        """
+        """Write a single point into the ring buffer."""
         self.mutex_ring_buffer.acquire()
         self.ring_buffer.append(point)
         self.mutex_ring_buffer.release()
 
     def read(self):
-        """
-        Return all available points from the ring buffer
-        """
+        """Return all available points from the ring buffer."""
         self.mutex_ring_buffer.acquire()
         ret = list(self.ring_buffer)
         self.ring_buffer.clear()

@@ -35,7 +35,7 @@ def crc(data):
     Args:
         data: Data package
     """
-    s = sum((ord(c) for c in data)) % 65536
+    s = sum(bytearray(data)) % 65536
     return struct.pack('!H', s)
 
 
@@ -77,8 +77,7 @@ def mkcmd(ncmd, fmt, *args):
     fmt = '!BB' + fmt
     cmdlen = struct.calcsize(fmt) - 2
     cmd = struct.pack(fmt, ncmd, cmdlen, *args)
-    packet = crc(cmd) + cmd
-    return packet
+    return crc(cmd) + cmd
 
 
 def str2hex(string):

@@ -1,4 +1,4 @@
-pyserial==2.7
+pyserial
 pytest
 flake8
 tox

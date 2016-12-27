@@ -1,29 +1,18 @@
 Installation
 ============
 
-You will need Administrator rights (superuser) to install opendaq.py.
+You will need Administrator rights (root access) to install this package system-wide.
 
-Run the command line in Administrator mode (Windows) or run sudo before the following commands in Linux.
+Using **pip**::
 
-You also need to have Python 2.7 installed to run setup installation::
-
-    $ python setup.py install
-
-If you have pip, at the command line::
-
-    $ pip install opendaq
-
-Or, if you have virtualenvwrapper installed::
-
-    $ mkvirtualenv opendaq
     $ pip install opendaq
 
 
 Development
 ===========
 
-If you want to collaborate with this project, you must also install some
-development tools. They are listed in the file ``requirements-dev.txt``::
+You will need some additional development tools if you want to collaborate with this project.
+They can be installed at once using pip::
 
     $ pip install -r requirements-dev.txt
 

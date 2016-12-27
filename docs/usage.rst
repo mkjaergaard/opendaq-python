@@ -396,8 +396,8 @@ Capture Input
 ==============================================
 
 The capture input permits measuring the time length of incoming digital signals.
-It makes use of device internal timer to calculate the time elapsed between changes in state (high to low or low to high) of 
-an external signal. OpenDAQ has a main clock running at 16MHz, which limits the minimum periods that the device is able to 
+It makes use of device internal timer to calculate the time elapsed between changes in state (high to low or low to high) of
+an external signal. OpenDAQ has a main clock running at 16MHz, which limits the minimum periods that the device is able to
 measure to several microseconds.
 
 The input in this mode is D5 (DIO 5 pin)
@@ -436,7 +436,7 @@ Finally, stop the capture when the experiment has finished:
 Counter Input
 ==============================================
 
-The counter input is also based on Timer 1, and its functionality consists on counting number of edges coming through the port (D6). 
+The counter input is also based on Timer 1, and its functionality consists on counting number of edges coming through the port (D6).
 This can be useful to measure the frequency of very fast signal or to read some kind of sensors.
 
 User can select which kind of digital edges will the peripheral detect (high or low), and he can also read and reset the counter back to 0 whenever it is necessary.
@@ -461,7 +461,7 @@ If *reset>0* , the counter is reset after perform the reading.
 Encoder Input
 ==============================================
 
-The encoder input is based on external interrupts on pin D6. Its functionality consists on counting number of edges coming through 
+The encoder input is based on external interrupts on pin D6. Its functionality consists on counting number of edges coming through
 the digital input D6 while keeping track of the direction of the movement, by reading D5 on each interrupt.
 
 User can select the maximum resolution of the encoder.
@@ -472,7 +472,7 @@ To work in this mode there are three methods. The first start the encoder functi
 
   daq.init_encoder(resolution)
 
-Resolution is the maximum number of ticks per round (32-bit counter).This command configures external interrupts on D6 and resets the pulse 
+Resolution is the maximum number of ticks per round (32-bit counter).This command configures external interrupts on D6 and resets the pulse
 counter to 0. Next, to get the current encoder relative position use:
 
  .. code:: python
@@ -512,19 +512,19 @@ PIO COnfiguration and control (CR mode)
 
 The openDAQ has 6 DIO (digital Inputs/Outputs). We have 4 DIO lines on the right side screw terminal block (D1-D4), and the two others on the left terminal block (D5-D6).
 
-D5 is a multipurpose terminal that is also connected with internal microprocessor’s Timer/Counter 2. Apart from being used as a DIO, this terminal can be configured as 
+D5 is a multipurpose terminal that is also connected with internal microprocessor’s Timer/Counter 2. Apart from being used as a DIO, this terminal can be configured as
 PWM output, Counter input or Capture input.
 
-All the digital I/O lines include an internal series resistor and a protective diode that provides overvoltage/short-circuit protection. The series resistors (about 100Ω) 
+All the digital I/O lines include an internal series resistor and a protective diode that provides overvoltage/short-circuit protection. The series resistors (about 100Ω)
 also limit the ability of these lines to sink or source current.
 
-The DIOs have 3 possible states: input, output-high, or output-low. Each line of I/O can be configured individually. When configured as an input, the line has a 50kΩ pull-up 
+The DIOs have 3 possible states: input, output-high, or output-low. Each line of I/O can be configured individually. When configured as an input, the line has a 50kΩ pull-up
 resistor to 5.0 volts. When configured as output-high, the line is connected to the internal 5.0 volt supply (through a series resistor).
 
 When configured as output-low, a bit is connected to GND (through a series resistor). All digital I/O are configured to be inputs at power up.
 
-We have two couples of commands to control the digital I/O lines. The first two ones control each line individually, one to set or read the line direction (input or output), 
-and the other to read or set the line value (high or low). The other two commands control the six lines at a time, one function to read or set the lines direction, and the 
+We have two couples of commands to control the digital I/O lines. The first two ones control each line individually, one to set or read the line direction (input or output),
+and the other to read or set the line value (high or low). The other two commands control the six lines at a time, one function to read or set the lines direction, and the
 other command to read or set the lines values.
 
 
@@ -548,7 +548,7 @@ Method                  Arguments                       Notes
 
 *set_port*          value: 0:1               Digital value: 0 Low, 1 High
 
-*read_port*                                 
+*read_port*
 
 ==============      ======================= ===========================
 
@@ -655,10 +655,10 @@ Calibration
 **IMPORTANT NOTE**: The functions used for openDAQ calibration have been redesigned completely from firmware version 1.4.0 and python library version 0.3
 
 AIN and DAC commands are transmitted between the host PC and the device in raw binary using the full 16-bit range of the binary transmissions. For example, raw code -32768
-correspond in the ADC readings of the openDAQ [M] to -4.096V, while it is equivalent to -12.0V for the openDAQ [S]. Maximum ADC raw values range up to 32767, which is equivalent 
-to 4.095V in openDAQ [M] and to 12.0V in openDAQ[S].  
+correspond in the ADC readings of the openDAQ [M] to -4.096V, while it is equivalent to -12.0V for the openDAQ [S]. Maximum ADC raw values range up to 32767, which is equivalent
+to 4.095V in openDAQ [M] and to 12.0V in openDAQ[S].
 
-The same happens for the DAC values: in all openDAQ models maximum raw value (32767) is equivalent to a +4.096V output, and in case of openDAQ [M] minimum value is -32768 or -4.095V. 
+The same happens for the DAC values: in all openDAQ models maximum raw value (32767) is equivalent to a +4.096V output, and in case of openDAQ [M] minimum value is -32768 or -4.095V.
 Minimum DAC value for openDAQ [S] is 0V which is equivalent to 0 raw code.
 
 In the case of the ADC inputs the situation is more complex, as there are different gain settings that do affect the conversion between raw codes and real voltage values.
@@ -666,12 +666,12 @@ In the case of the ADC inputs the situation is more complex, as there are differ
 The devices always use the raw values for the internal calculations and data transmission, and it is the *daq.py* library who has the duty to translate those binary codes into actual
 voltage values.
 
-The relationships between the voltage values and raw codes are always linear, and a good approximation to transform the raw codes into voltages would be just to use the theorical 
-formulas that could be deduced from previous paragraphs. Anyhow, the voltage values calculated from the theorical formulas would have some error, because the components inside the 
-circuits of the openDAQ devices do not have a perfect ideal behaviour. Thus, a specific calibration is used for each openDAQ device, so that the values read by the ADCs and set in the 
-DAC are far more similar to the ideal values. 
+The relationships between the voltage values and raw codes are always linear, and a good approximation to transform the raw codes into voltages would be just to use the theorical
+formulas that could be deduced from previous paragraphs. Anyhow, the voltage values calculated from the theorical formulas would have some error, because the components inside the
+circuits of the openDAQ devices do not have a perfect ideal behaviour. Thus, a specific calibration is used for each openDAQ device, so that the values read by the ADCs and set in the
+DAC are far more similar to the ideal values.
 
-These values are stored in the permanent EEPROM memory of the openDAQs and used by the *opendaq-python* library to calculate the formulas between the raw codes and voltage values. 
+These values are stored in the permanent EEPROM memory of the openDAQs and used by the *opendaq-python* library to calculate the formulas between the raw codes and voltage values.
 Those calculations are carried in a slighly different manner depending on the openDAQ model. The code of the conversions is in the *model.py* file.
 
 DAC calibration
@@ -684,11 +684,11 @@ The functions that manage the DAC calibration are:
     daq.set_dac_cal(dac_corr,dac_offset)
     daq.get_dac_cal()
 
-These methods set and read the device DAC calibration, where *dac_corr* and *dac_offsets* are are lists of values for each DAC channel (thus, they only have one element each). 
-The values are the coefficients of the line that corrects the deviation between the ideal values and the actual values that the device outputs when it applies no calibration. 
+These methods set and read the device DAC calibration, where *dac_corr* and *dac_offsets* are are lists of values for each DAC channel (thus, they only have one element each).
+The values are the coefficients of the line that corrects the deviation between the ideal values and the actual values that the device outputs when it applies no calibration.
 
 - *dac_corr* is the slope of the line, which should be the relationship between the actual values (e.g. 1.02V) divided by the theorical desired values (e.g. 1.00)
-- *dac_offset* is the zero crossing of the line, or the actual value for a 0V command    
+- *dac_offset* is the zero crossing of the line, or the actual value for a 0V command
 
 In the case of the of the DAC output the mathematical function between the theorical value and the raw binary code is exactly the same:
 
@@ -699,7 +699,7 @@ And applying the calibration:
 
 .. math::
     raw_dac_code = (volts - dac_offset) / (dac_base_gain * dac_corr)
-    
+
 
 ADC calibration
 ---------------
@@ -711,21 +711,21 @@ The functions that manage the DAC calibration are:
     daq.set_adc_cal(adc_corrs,adc_offsets,flag)
     daq.get_adc_cal()
 
-Where as in the case of the DAC calibration, *adc_corrs* and *adc_offsets* are the lists of values of the parameters for each calibration line. 
+Where as in the case of the DAC calibration, *adc_corrs* and *adc_offsets* are the lists of values of the parameters for each calibration line.
 
 - *adc_corrs* are the slopes of the calibration lines, the read value divided by the real voltage value at the input.
 - *adc_offsets* is the zero crossing of the line, in this case the raw ADC value for a 0V input (in this case, it is not a voltage but a raw binary code).
-- *flag*: in the case of the openDAQ[S], allows loading the calibration for the inputs in SE mode, DE mode or both ('ALL'). 
+- *flag*: in the case of the openDAQ[S], allows loading the calibration for the inputs in SE mode, DE mode or both ('ALL').
 
 In the case of the ADC, several facts have to be taken into consideration:
 
 - Each analog input will have a different calibration line
-- In the case of openDAQ [M] each gain setting must be calibrated separately, as the gains are set by resistor values with a relatively high tolerance. This is not the case of the 
+- In the case of openDAQ [M] each gain setting must be calibrated separately, as the gains are set by resistor values with a relatively high tolerance. This is not the case of the
 openDAQ [S], which uses a PGA with factory default calibration for all ranges.
-- The inputs of the openDAQ [S] have a different calibration if they are used as single ended (SE) or differential (DE). In the case of openDAQ [M] the calibration can be the same for 
+- The inputs of the openDAQ [S] have a different calibration if they are used as single ended (SE) or differential (DE). In the case of openDAQ [M] the calibration can be the same for
 both modes, because the inputs are just multiplexed.
 
-All of this translates into the following: 
+All of this translates into the following:
 
 - openDAQ [M] has a total of 13 ADC calibration slots, 8 for each analog input, and 5 for each gain setting.
 - openDAQ [S] has 16 ADC calibration slots, 8 for each analog input in SE mode, and 8 for each input in DE mode.

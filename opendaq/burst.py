@@ -24,20 +24,16 @@ from threading import Lock
 
 
 class DAQBurst(DAQExperiment):
-    """
-    Args:
-        - mode: Define data source or destination [0:5]:
-            0) ANALOG_INPUT
-            1) ANALOG_OUTPUT
-        - period: Period of the stream experiment (microseconds) [1:65536]
-        - npoints: Total number of points for the experiment [0:65536]
-        - continuous: Indicates if experiment is continuous
-            - False - run once
-            - True - Continuous execution
-        - buffersize: Buffer size
-    Raises:
-        - LengthError: Too many experiments at the same time
-        - ValueError: Values out of range
+    """Burst experiment.
+
+    :param mode: Define data source or destination (use :class:`.ExpMode`).
+    :param period: Period of the stream experiment (microseconds) [1:65536]
+    :param npoints: Total number of points for the experiment [0:65536]
+    :param continuous: Indicates if the experiment is continuous
+        (False: run once, True: continuous).
+    :param buffersize: Buffer size
+    :raises: LengthError (too many experiments at the same time), ValueError
+        (values out of range)
     """
     def __init__(self, mode, period, npoints=10,
                  continuous=False, buffersize=4000):

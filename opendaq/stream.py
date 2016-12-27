@@ -25,24 +25,17 @@ from threading import Lock
 
 class DAQStream(DAQExperiment):
     """
-    Args:
-        - mode: Define data source or destination [0:5]:
-            0) ANALOG_INPUT
-            1) ANALOG_OUTPUT
-            2) DIGITAL_INPUT
-            3) DIGITAL_OUTPUT
-            4) COUNTER_INPUT
-            5) CAPTURE_INPUT
-        - period: Period of the stream experiment (milliseconds) [1:65536]
-        - npoints: Total number of points for the experiment
-            [0:65536] (0 indicates continuous acquisition)
-        - continuous: Indicates if experiment is continuous
-            - False: run once
-            - True: continuous
-        - buffersize: Buffer size
-    Raises:
-        - LengthError: Too many experiments at the same time
-        - ValueError: Values out of range
+    Stream experiment.
+
+    :param mode: Define data source or destination (use :class:`.ExpMode`).
+    :param period: Period of the stream experiment (milliseconds) [1:65536]
+    :param npoints: Total number of points for the experiment
+            [0:65536] (0 indicates continuous acquisition).
+    :param continuous: Indicates if experiment is continuous (True) or
+        one-shot (False).
+    :param buffersize: Buffer size.
+    :raises: LengthError (too many experiments at the same time),
+        ValueError (values out of range)
     """
     def __init__(self, mode, number, period,
                  npoints=10, continuous=False, buffersize=1000):

@@ -50,7 +50,7 @@ class SerialSim(object):
 
     def __get_command(self, ncmd, length):
         try:
-            ret = next((e for e in self.__commands.itervalues()
+            ret = next((e for e in self.__commands.values()
                         if e[1] == ncmd and e[2] == length))
         except StopIteration:
             raise ValueError("Invalid command number")
@@ -70,7 +70,7 @@ class SerialSim(object):
         return mkcmd(ncmd, fmt, *ret_values)
 
     def list_commands(self):
-        cmd_list = [(cmd, lst[1]) for cmd, lst in self.__commands.items()]
+        cmd_list = [(cmd, lst[1]) for cmd, lst in list(self.__commands.items())]
         return sorted(cmd_list, key=lambda cmd: cmd[1])
 
     def exec_command(self, data):
@@ -95,7 +95,7 @@ class SerialSim(object):
             raise IOError("Port is closed")
 
         ret = bytearray()
-        for i in xrange(size):
+        for i in range(size):
             try:
                 ret.append(self.__out_buf.pop(0))
             except IndexError:
