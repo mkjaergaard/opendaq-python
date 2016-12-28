@@ -1,4 +1,7 @@
-# Copyright 2013 Juan Menendez <juanmb@ingen10.com>
+#!/usr/bin/env python
+
+# Copyright 2016
+# Ingen10 Ingenieria SL
 #
 # This file is part of opendaq.
 #

@@ -13,7 +13,7 @@ else:
 if len(sys.argv) > 2:
     channel = sys.argv[2] - 1
 else:
-    channel = 0    
+    channel = 0
 
 x = []
 y = []
@@ -28,7 +28,7 @@ with open(filename, 'r+') as f:
 new_corr, new_offset = np.polyfit(x, y, 1)
 f.close()
 
-		
+
 dq = DAQ("COM3")
 time.sleep(.05)
 
@@ -74,7 +74,7 @@ dac_corr, dac_offset = dq.get_dac_cal()
 print new_corr, new_offset
 
 dac_corr[channel] *= new_corr
-dac_offset[channel] += new_offset 
+dac_offset[channel] += new_offset
 
 dq.set_dac_cal(dac_corr,dac_offset)
 dq.get_dac_cal()
@@ -122,7 +122,7 @@ for i in dq.model.pinput_range:
 outputfile.write("]\nb= [")
 for i in dq.model.pinput_range:
     outputfile.write("%1.1f "%adc_offsets[i-1])
-outputfile.write("]\r\n")    
+outputfile.write("]\r\n")
 
 print "\n------------------------------\n"
 print "ADC CALIBRATION - DE mode:\n"
@@ -156,8 +156,8 @@ for i in range(len(pinputs)):
 outputfile.write("]\nb= [")
 for i in range(len(pinputs)):
     outputfile.write("%1.1f "%adc_offsets[i])
-outputfile.write("]\r\n")  
-    
+outputfile.write("]\r\n")
+
 print "\n------------------------------\n"
 print "CALIBRATION TEST\n"
 

@@ -24,30 +24,19 @@ import time
 import struct
 import serial
 import threading
-from opendaq.common import check_crc, check_stream_crc, mkcmd
-from opendaq.common import LengthError, CRCError
-from opendaq.simulator import DAQSimulator
-from opendaq.stream import DAQStream
-from opendaq.burst import DAQBurst
-from opendaq.external import DAQExternal
-from opendaq.model import get_model
-from enum import Enum
+from enum import IntEnum
+from .common import check_crc, check_stream_crc, mkcmd
+from .common import LengthError, CRCError
+from .model import get_model, PGAGain
+from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
+from .simulator import DAQSimulator
 
 BAUDS = 115200
 NAK = mkcmd(160, '')
+MAX_CHANNELS = 4
 
 
-class ExpMode(Enum):
-    """Valid experiment modes."""
-    ANALOG_INPUT = 0
-    ANALOG_OUTPUT = 1
-    DIGITAL_INPUT = 2
-    DIGITAL_OUTPUT = 3
-    COUNTER_INPUT = 4
-    CAPTURE_INPUT = 5
-
-
-class LedColor(Enum):
+class LedColor(IntEnum):
     """Valid LED colors."""
     OFF = 0
     GREEN = 1
@@ -55,34 +44,8 @@ class LedColor(Enum):
     YELLOW = 3
 
 
-GAIN_M_X033 = 0
-GAIN_M_X1 = 1
-GAIN_M_X2 = 2
-GAIN_M_X10 = 3
-GAIN_M_X100 = 4
-
-GAIN_S_X1 = 0
-GAIN_S_X2 = 1
-GAIN_S_X4 = 2
-GAIN_S_X5 = 3
-GAIN_S_X8 = 4
-GAIN_S_X10 = 5
-GAIN_S_X16 = 6
-GAIN_S_X20 = 7
-
-SW_TRG = 0
-DIN1_TRG = 1
-DIN2_TRG = 2
-DIN3_TRG = 3
-DIN4_TRG = 4
-DIN5_TRG = 5
-DIN6_TRG = 6
-ABIG_TRG = 10
-ASML_TRG = 20
-
-
 class DAQ(threading.Thread):
-    """This class represents an OpenDAQ device"""
+    """This class represents an OpenDAQ device."""
 
     def __init__(self, port, debug=False):
         """Class constructor
@@ -90,9 +53,9 @@ class DAQ(threading.Thread):
         :param debug: Turn on serial echoing to sdout.
         """
         threading.Thread.__init__(self)
-        self.port = port
-        self.debug = debug
-        self.simulate = (port == 'sim')
+        self.__port = port
+        self.__debug = debug
+        self.__simulate = (port == 'sim')
 
         self.__running = False
         self.__measuring = False
@@ -100,29 +63,29 @@ class DAQ(threading.Thread):
         self.__gain = 0
         self.__pinput = 1
         self.__ninput = 0
+        self.__exp = []     # list of experiments
+
         self.open()
 
         self.model = get_model(*self.get_info())
 
+        # obtain calibration values
         time.sleep(.05)
         self.get_dac_cal()
         time.sleep(.05)
         self.get_adc_cal()
 
-        self.experiments = []
-        self.preload_data = None
-
     def open(self):
-        """Open the serial port"""
-        if self.simulate:
-            self.ser = DAQSimulator(self.port, BAUDS, timeout=1)
+        """Open the serial port."""
+        if self.__simulate:
+            self.ser = DAQSimulator(self.__port, BAUDS, timeout=1)
         else:
-            self.ser = serial.Serial(self.port, BAUDS, timeout=1)
+            self.ser = serial.Serial(self.__port, BAUDS, timeout=1)
             self.ser.setRTS(0)
             time.sleep(2)
 
     def close(self):
-        """Close the serial port"""
+        """Close the serial port."""
         self.ser.close()
 
     def send_command(self, command, ret_fmt):
@@ -139,7 +102,7 @@ class DAQ(threading.Thread):
         ret_len = 2 + struct.calcsize(fmt)
         self.ser.write(command)
         ret = self.ser.read(ret_len)
-        if self.debug:
+        if self.__debug:
             print("Command:  ", end=" ")
             for c in command:
                 print("%02X" % ord(c), end=" ")
@@ -296,6 +259,7 @@ class DAQ(threading.Thread):
 
     @property
     def fw_ver(self):
+        """Device firmware version."""
         return self.model.fw_ver
 
     def read_eeprom(self, pos):
@@ -385,7 +349,7 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        self.model.check_valid_adc_settings(pinput, ninput, gain)
+        self.model.check_valid_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
@@ -394,8 +358,8 @@ class DAQ(threading.Thread):
         self.__pinput = pinput
         self.__ninput = ninput
 
-        self.send_command(mkcmd(2, 'BBBB', pinput, ninput, gain, nsamples),
-                          'hBBBB')
+        self.send_command(mkcmd(2, 'BBBB', pinput, ninput, int(gain),
+                                nsamples), 'hBBBB')
 
     def set_led(self, color, number=1):
         """Choose LED status.
@@ -611,26 +575,25 @@ class DAQ(threading.Thread):
         """Stop PWM"""
         self.send_command(mkcmd(11, ''), '')
 
-    def __trigger_setup(self, number, trg_mode, trg_value):
+    def __trigger_setup(self, number, mode, value):
         """Change the trigger mode of the DataChannel.
 
         :param number: Number of the DataChannel.
-        :param trg_mode: Trigger mode of the DataChannel.
-        :param trg_value: Value of the trigger mode.
+        :param mode: Trigger mode (use :class:`.Trigger`).
+        :param value: Value of the trigger mode.
         :raises: ValueError
         """
 
-        if not 1 <= number <= 4:
-                raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
-        if (type(trg_mode) == int and not 0 <= trg_mode <= 6
-                and not trg_mode == 10 and not trg_mode == 20):
-                raise ValueError("Invalid trigger mode")
+        if not type(mode) is Trigger:
+            raise ValueError("Invalid trigger mode")
 
-        if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
-            raise ValueError("Invalid value of digital trigger(0,1)")
+        if 1 <= mode <= 6 and not value in [0, 1]:
+            raise ValueError("Invalid value of digital trigger")
 
-        self.send_command(mkcmd(33, 'BBH', number, trg_mode, trg_value), 'BBH')
+        self.send_command(mkcmd(33, 'BBH', number, mode, value), 'BBH')
 
     def trigger_mode(self, number):
         """Get the trigger mode of the DataChannel.
@@ -639,10 +602,11 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
-        return self.send_command(mkcmd(34, 'B', number), 'H')[0]
+        mode = self.send_command(mkcmd(34, 'B', number), 'H')[0]
+        return Trigger(mode)
 
     def get_state_ch(self, number):
         """Get state of the DataChannel.
@@ -651,8 +615,8 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
         return self.send_command(mkcmd(35, 'B', number), 'H')[0]
 
@@ -670,19 +634,20 @@ class DAQ(threading.Thread):
             [0:255].
         :raises: ValueError
         """
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
         if not type(mode) is ExpMode:
             raise ValueError("Invalid mode")
 
-        self.model.check_valid_adc_settings(pinput, ninput, gain)
+        self.model.check_valid_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
 
-        return self.send_command(mkcmd(22, 'BBBBBB', number, mode.value,
-            pinput, ninput, gain, nsamples), 'BBBBBB')
+        return self.send_command(
+            mkcmd(22, 'BBBBBB', number, mode.value, pinput, ninput, int(gain),
+                  nsamples), 'BBBBBB')
 
     def __setup_channel(self, number, npoints, continuous=False):
         """Configure the experiment's number of points.
@@ -695,8 +660,8 @@ class DAQ(threading.Thread):
             - True: continuous
         :raises: ValueError
         """
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
         if not 0 <= npoints < 65536:
             raise ValueError("npoints out of range")
@@ -714,15 +679,15 @@ class DAQ(threading.Thread):
         if not 1 <= nb <= 4:
             raise ValueError("Invalid reference")
         self.__destroy_channel(nb)
-        for i in range(len(self.experiments))[::-1]:
-            if self.experiments[i].number == nb:
-                del(self.experiments[i])
+        for i in range(len(self.__exp))[::-1]:
+            if self.__exp[i].number == nb:
+                del(self.__exp[i])
 
     def clear_experiments(self):
         """Delete the whole experiment list."""
-        for i in range(len(self.experiments))[::-1]:
+        for i in range(len(self.__exp))[::-1]:
             self.__destroy_channel(i+1)
-            del(self.experiments[i])
+            del(self.__exp[i])
 
     def __dchanindex(self):
         """Check which internal DataChannels are used or available.
@@ -731,7 +696,7 @@ class DAQ(threading.Thread):
             - available: list of free DataChannels.
             - used: list of asigned DataChannels.
         """
-        used = [e.number for e in self.experiments]
+        used = [e.number for e in self.__exp]
         available = [i for i in range(1, 5) if i not in used]
         return available, used
 
@@ -741,8 +706,8 @@ class DAQ(threading.Thread):
         :param number: Number of DataChannel to flush.
         :returns: ValueError
         """
-        if not 1 <= number <= 4:
-                raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+                raise ValueError("Invalid DataChannel number")
 
         self.send_command(mkcmd(45, 'B', number), 'B')
 
@@ -753,49 +718,50 @@ class DAQ(threading.Thread):
             all DataChannels)
         :raises: ValueError
         """
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
         return self.send_command(mkcmd(57, 'B', number), 'B')[0]
 
     def create_stream(self, mode, *args, **kwargs):
         """Create Stream experiment.
 
-        See the DAQStream class constructor for more info.
+        See the :class:`.DAQStream` class constructor for more info.
         """
-        available, used = self.__dchanindex()
+        if not type(mode) is ExpMode:
+            raise ValueError("Invalid mode")
 
-        index = len(self.experiments)
-
-        if index > 0 and self.experiments[0].__class__ is DAQBurst:
+        index = len(self.__exp)
+        if index > 0 and self.__exp[0].__class__ is DAQBurst:
             raise LengthError("Device is configured for a Burst experiment")
 
+        available, _ = self.__dchanindex()
         if len(available) == 0:
-            raise LengthError("Only 4 experiments available at a time")
+            raise LengthError("Maximum value of experiments has been reached")
 
-        if mode == ANALOG_OUTPUT:
+        if mode == ExpMode.ANALOG_OUT:
             chan = 4  # DAC_OUTPUT is fixed at DataChannel 4
             for i in range(index):
-                if self.experiments[i].number == chan:
-                    if type(self.experiments[i]) is DAQStream:
-                        self.experiments[i].number = available[0]
+                if self.__exp[i].number == chan:
+                    if type(self.__exp[i]) is DAQStream:
+                        self.__exp[i].number = available[0]
                     else:
                         raise ValueError("DataChannel 4 is being used")
         else:
             chan = available[0]
 
-        self.experiments.append(DAQStream(mode, chan, *args, **kwargs))
-        return self.experiments[index]
+        self.__exp.append(DAQStream(mode, chan, *args, **kwargs))
+        return self.__exp[index]
 
     def __create_stream(self, number, period):
-        """Send a command to the firmware to create Stream experiment.
+        """Send a command to the firmware to create a Stream experiment.
 
         :param number: Assign a DataChannel number for this experiment [1:4].
-        :param period: Period of the stream experiment (milliseconds) [1:65536].
+        :param period: Period of the stream experiment (ms) [1:65536].
         :raises: ValueError
         """
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
         if not 1 <= period <= 65535:
             raise ValueError("Invalid period")
 
@@ -804,38 +770,38 @@ class DAQ(threading.Thread):
     def create_external(self, mode, clock_input, *args, **kwargs):
         """Create External experiment.
 
-        See the DAQExternal class constructor for more info.
+        See the :class:`.DAQExternal` class constructor for more info.
         """
-        available, used = self.__dchanindex()
+        if not type(mode) is ExpMode:
+            raise ValueError("Invalid mode")
 
-        index = len(self.experiments)
-
-        if index > 0 and self.experiments[0].__class__ is DAQBurst:
+        index = len(self.__exp)
+        if index > 0 and self.__exp[0].__class__ is DAQBurst:
             raise LengthError("Device is configured for a Burst experiment")
 
+        available, _ = self.__dchanindex()
         if len(available) == 0:
-            raise LengthError("Only 4 experiments available at a time")
+            raise LengthError("Maximum value of experiments has been reached")
 
         for i in range(index):
-            if self.experiments[i].number == clock_input:
-                if type(self.experiments[i]) is DAQStream:
-                    self.experiments[i].number = available[0]
+            if self.__exp[i].number == clock_input:
+                if type(self.__exp[i]) is DAQStream:
+                    self.__exp[i].number = available[0]
                 else:
                     raise ValueError("Clock_input is being used by another experiment")
 
-        self.experiments.append(DAQExternal(mode, clock_input,
-                                            *args, **kwargs))
-        self.experiments[index]
+        self.__exp.append(DAQExternal(mode, clock_input, *args, **kwargs))
+        return self.__exp[index]
 
     def __create_external(self, number, edge):
-        """Send a command to the firmware to create External experiment.
+        """Send a command to the firmware to create an External experiment.
 
         :param number: Assign a DataChannel number for this experiment [1:4].
         :param edge: New data on rising (1) or falling (0) edges [0:1].
         :raises: ValueError
         """
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid number")
+        if not 1 <= number <= MAX_CHANNELS:
+            raise ValueError("Invalid DataChannel number")
 
         if edge not in [0, 1]:
             raise ValueError("Invalid edge")
@@ -843,17 +809,19 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(20, 'BB', number, edge), 'BB')
 
     def create_burst(self, *args, **kwargs):
-        """Create Burst experiment."""
+        """Create Burst experiment.
 
-        if len(self.experiments) > 0:
-                raise ValueError(
-                    "Only 1 experiment available at a time if using burst")
+        See the :class:`.DAQBurst` class constructor for more info.
+        """
 
-        self.experiments.append(DAQBurst(*args, **kwargs))
-        self.experiments[0]
+        if len(self.__exp) > 0:
+            raise LengthError("Only one experiment allowed when using burst")
+
+        self.__exp.append(DAQBurst(*args, **kwargs))
+        return self.__exp[0]
 
     def __create_burst(self, period):
-        """Send a command to the firmware to create Burst experiment.
+        """Send a command to the firmware to create a Burst experiment.
 
         :param period: Period of the burst experiment (microseconds)
             [100:65535]
@@ -947,7 +915,7 @@ class DAQ(threading.Thread):
 
     def start(self):
         """Start all available experiments."""
-        for s in self.experiments:
+        for s in self.__exp:
             if s.__class__ is DAQBurst:
                 self.__create_burst(s.period)
             elif s.__class__ is DAQStream:
@@ -959,7 +927,7 @@ class DAQ(threading.Thread):
                                 s.ninput, s.gain, s.nsamples)
             self.__trigger_setup(s.number, s.trg_mode, s.trg_value)
 
-            if (s.get_mode() == ANALOG_OUTPUT):
+            if (s.get_mode() == ExpMode.ANALOG_OUT):
                 pr_data, pr_offset = s.get_preload_data()
                 for i in range(len(pr_offset)):
                     self.__load_signal(pr_offset[i], pr_data[i])
@@ -1025,9 +993,10 @@ class DAQ(threading.Thread):
                         # data available
                         available, used = self.__dchanindex()
                         for i in range(len(channel)):
-                            exp = self.experiments[used.index(channel[i]+1)]
+                            exp = self.__exp[used.index(channel[i]+1)]
                             gain_id, pinput, ninput, _ = exp.get_parameters()
-                            exp.add_point(self.model.raw_to_volts(data[i], gain_id, pinput, ninput))
+                            exp.add_point(self.model.raw_to_volts(
+                                data[i], gain_id, pinput, ninput))
 
                     elif result == 3:
                         self.halt()

@@ -1,6 +1,7 @@
-#!/usr/bin/env python
+# !/usr/bin/env python
 
-# Copyright 2013 Juan Menendez <juanmb@ingen10.com>
+# Copyright 2016
+# Ingen10 Ingenieria SL
 #
 # This file is part of opendaq.
 #
@@ -18,7 +19,7 @@
 # along with opendaq.  If not, see <http://www.gnu.org/licenses/>.
 
 from __future__ import absolute_import
-from .daq import DAQ, LedColor, ExpMode
+from .daq import DAQ, LedColor, ExpMode, PGAGain, Trigger
 
 __version__ = '0.2.0'
 __all__ = ['DAQ']

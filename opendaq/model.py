@@ -21,6 +21,24 @@
 
 from __future__ import print_function
 from __future__ import division
+from enum import IntEnum
+
+
+class PGAGain(IntEnum):
+    """Valid PGA gains."""
+    X033 = 0
+    X1 = 1
+    X2 = 2
+    X10 = 3
+    X100 = 4
+    S_X1 = 0
+    S_X2 = 1
+    S_X4 = 2
+    S_X5 = 3
+    S_X8 = 4
+    S_X10 = 5
+    S_X16 = 6
+    S_X20 = 7
 
 
 class DAQModel(object):
@@ -67,19 +85,15 @@ class DAQModel(object):
             raise ValueError("Invalid gain selection")
 
     def volts_to_raw(self, volts, number):
-        """
-        Convert a value in volts to a raw value.
+        """Convert a value in volts to a raw value.
         Device calibration values are used for the calculation.
 
-        openDAQ[M] range: -4.096 V to +4.096 V
-        openDAQ[S] range: 0 V to +4.096 V
+         - openDAQ[M] range: -4.096 V to +4.096 V
+         - openDAQ[S] range: 0 V to +4.096 V
 
-        Args:
-            volts: value to convert to raw
-        Returns:
-            Raw value
-        Raises:
-            ValueError: DAC voltage out of range
+        :param volts: Value to convert to raw.
+        :returns: Raw value.
+        :raises: ValueError: DAC voltage out of range
         """
         self.check_valid_dac_value(volts)
 
@@ -101,8 +115,9 @@ class ModelM(DAQModel):
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(self, fw_ver, serial)
         self.model_str = "[M]"
-        self.pio_slots = 6
+        self.serial_str = "ODM08%03d7" % self.serial
 
+        self.pio_slots = 6
         self.adc_slots = 13
         self.adc_gains = []
         self.adc_offsets = []
@@ -121,17 +136,12 @@ class ModelM(DAQModel):
         self.min_dac_value = -4.096
         self.max_dac_value = 4.095
 
-    @property
-    def serial_str(self):
-        return "ODM08%03d7" % self.serial
-
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
         """
         Convert a raw value to a value in volts.
 
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
+        :param raw: Value to convert to volts.
+        :param gain_id: ID of the analog configuration setup.
         """
         base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
 
@@ -153,15 +163,16 @@ class ModelS(DAQModel):
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(self, fw_ver, serial)
         self.model_str = "[S]"
-        self.pio_slots = 6
+        self.serial_str = "ODS08%03d7" % self.serial
 
+        self.pio_slots = 6
         self.adc_slots = 16
         self.adc_gains = []
         self.adc_offsets = []
         self.adc_base_ampli = [1, 2, 4, 5, 8, 10, 16, 20]
         self.adc_base_gain = 32768 / 12.0
-        self.min_adc_value = -12
-        self.max_adc_value = 12
+        self.min_adc_value = -12.0
+        self.max_adc_value = 12.0
 
         self.pinput_range = list(range(1, 9))
         self.ninput_range = [0]
@@ -173,17 +184,11 @@ class ModelS(DAQModel):
         self.min_dac_value = 0
         self.max_dac_value = 4.095
 
-    @property
-    def serial_str(self):
-        return "ODS08%03d7" % self.serial
-
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
-        """
-        Convert a raw value to a value in volts.
+        """Convert a raw value to a value in volts.
 
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
+        :param raw: Value to convert to volts.
+        :param gain_id: ID of the analog configuration setup.
         """
         adc_chp_slot = pinput-1
         if ninput != 0:
@@ -209,7 +214,7 @@ class ModelS(DAQModel):
             return list(range(self.dac_slots, self.dac_slots+self.adc_slots / 2))
         elif flag == 'DE':
             return list(range(self.dac_slots + self.adc_slots / 2,
-                         self.dac_slots + self.adc_slots))
+                              self.dac_slots + self.adc_slots))
         elif flag == 'ALL':
             return list(range(self.dac_slots, self.dac_slots+self.adc_slots))
         else:
@@ -222,8 +227,9 @@ class ModelN(DAQModel):
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(self, fw_ver, serial)
         self.model_str = "[N]"
-        self.pio_slots = 6
+        self.serial_str = "ODN08%03d7" % self.serial
 
+        self.pio_slots = 6
         self.adc_slots = 16
         self.adc_gains = []
         self.adc_offsets = []
@@ -242,17 +248,12 @@ class ModelN(DAQModel):
         self.min_dac_value = -4.096
         self.max_dac_value = 4.095
 
-    @property
-    def serial_str(self):
-        return "ODN08%03d7" % self.serial
-
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
         """
         Convert a raw value to a value in volts.
 
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
+        :param raw: Value to convert to volts.
+        :param gain_id: ID of the analog configuration setup.
         """
         base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
 
@@ -265,12 +266,14 @@ class ModelN(DAQModel):
 
         return round((raw - offset) * base_gain * gain, 5)
 
+
 class ModelTP8(DAQModel):
     _id = 10
 
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(self, fw_ver, serial)
         self.model_str = "TP8x"
+        self.serial_str = "TP8x10%04d" % self.serial
         self.pio_slots = 6
 
         self.adc_slots = 12
@@ -291,17 +294,11 @@ class ModelTP8(DAQModel):
         self.min_dac_value = -1.25
         self.max_dac_value = 1.25
 
-    @property
-    def serial_str(self):
-        return "TP8x10%04d" % self.serial
-
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
-        """
-        Convert a raw value to a value in volts.
+        """Convert a raw value to a value in volts.
 
-        Args:
-            raw: Value to convert to volts
-            gain_id: ID of the analog configuration setup
+        :param raw: Value to convert to volts.
+        :param gain_id: ID of the analog configuration setup.
         """
         base_gain = 1./(self.adc_base_gain * self.adc_base_ampli[gain_id])
         gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])

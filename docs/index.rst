@@ -3,8 +3,8 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-OpenDAQ Python package
-======================
+openDAQ
+=======
 
 This is the documentation of the **openDAQ** Python package
 

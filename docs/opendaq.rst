@@ -11,26 +11,10 @@ See ``usage.rst`` for additional info.
     :undoc-members:
     :show-inheritance:
 
-Stream Experiment
-^^^^^^^^^^^^^^^^^
+Experiment classes
+^^^^^^^^^^^^^^^^^^
 
-.. automodule:: opendaq.stream
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-Burst Experiment
-^^^^^^^^^^^^^^^^
-
-.. automodule:: opendaq.burst
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-External Experiment
-^^^^^^^^^^^^^^^^^^^
-
-.. automodule:: opendaq.external
+.. automodule:: opendaq.experiment
     :members:
     :undoc-members:
     :show-inheritance:

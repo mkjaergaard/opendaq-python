@@ -18,6 +18,33 @@
 # You should have received a copy of the GNU Lesser General Public License
 # along with opendaq.  If not, see <http://www.gnu.org/licenses/>.
 
+from enum import IntEnum
+from collections import deque
+from threading import Lock
+
+
+class ExpMode(IntEnum):
+    """Valid experiment modes."""
+    ANALOG_IN = 0
+    ANALOG_OUT = 1
+    DIGITAL_IN = 2
+    DIGITAL_OUT = 3
+    COUNTER_IN = 4
+    CAPTURE_IN = 5
+
+
+class Trigger(IntEnum):
+    """Valid trigger modes."""
+    SW = 0
+    DIN1 = 1
+    DIN2 = 2
+    DIN3 = 3
+    DIN4 = 4
+    DIN5 = 5
+    DIN6 = 6
+    ABIG = 10
+    ASML = 20
+
 
 class DAQExperiment(object):
     def analog_setup(self, pinput=1, ninput=0, gain=1, nsamples=20):
@@ -31,22 +58,22 @@ class DAQExperiment(object):
         self.gain = gain
         self.nsamples = nsamples
 
-    def trigger_setup(self, trg_mode=0, trg_value=0):
+    def trigger_setup(self, mode=Trigger.SW, value=0):
         """Channge the trigger mode of datachannel.
 
-        :param trg_mode: Trigger mode of the datachannel.
-        :param trg_value: Value of the trigger mode.
+        :param mode: Trigger mode (use :class:`.Trigger`).
+        :param value: Value of the trigger mode.
         :raises: ValueError
         """
 
-        if (type(trg_mode) == int and not 0 <= trg_mode <= 6
-                and not trg_mode == 10 and not trg_mode == 20):
-            raise ValueError('Invalid trigger mode')
-        if 1 <= trg_mode <= 6 and not 0 <= trg_value <= 1:
-            raise ValueError('Invalid value of digital trigger (0,1)')
+        if not type(mode) is Trigger:
+            raise ValueError("Invalid trigger mode")
 
-        self.trg_mode = trg_mode
-        self.trg_value = trg_value
+        if 1 <= mode <= 6 and not value in [0, 1]:
+            raise ValueError("Invalid value of digital trigger")
+
+        self.trg_mode = mode
+        self.trg_value = value
 
     def get_parameters(self):
         """Return gain, pinput and ninput."""
@@ -84,3 +111,131 @@ class DAQExperiment(object):
         self.ring_buffer.clear()
         self.mutex_ring_buffer.release()
         return ret
+
+
+class DAQStream(DAQExperiment):
+    """
+    Stream experiment.
+
+    :param mode: Define data source or destination (use :class:`.ExpMode`).
+    :param period: Period of the stream experiment (milliseconds) [1:65536]
+    :param npoints: Total number of points for the experiment
+            [0:65536] (0 indicates continuous acquisition).
+    :param continuous: Indicates if experiment is continuous (True) or
+        one-shot (False).
+    :param buffersize: Buffer size.
+    :raises: LengthError (too many experiments at the same time),
+        ValueError (values out of range)
+    """
+    def __init__(self, mode, number, period,
+                 npoints=10, continuous=False, buffersize=1000):
+        if not 1 <= number <= 4:
+            raise ValueError('Invalid number')
+
+        if mode == 1 and number != 4:
+            raise ValueError('Analog output must use DataChannel 4')
+
+        if not 1 <= period <= 65535:
+            raise ValueError('Invalid period')
+
+        if type(mode) == int and not 0 <= mode <= 5:
+            raise ValueError('Invalid mode')
+
+        if not 0 <= npoints < 65536:
+            raise ValueError('npoints out of range')
+
+        if not 1 <= buffersize <= 20000:
+            raise ValueError('Invalid buffer size')
+
+        self.number = number
+        self.period = period
+        self.mode = mode
+        self.npoints = npoints
+        self.continuous = continuous
+
+        self.ring_buffer = deque(maxlen=buffersize)
+        self.mutex_ring_buffer = Lock()
+        self.analog_setup()
+        self.trigger_setup()
+
+
+class DAQExternal(DAQExperiment):
+    """External experiment.
+
+    :param mode: Define data source or destination (use :class:`.ExpMode`).
+    :param clock_input: Digital input used as external clock
+    :param edge: New data on rising (1) or falling (0) edges [0:1]
+    :param npoints: Total number of points for the experiment [0:65536]
+    :param continuous: Indicates if the experiment is continuous
+        (False: run once, True: continuous).
+    :param buffersize: Buffer size
+    :raises: LengthError (too many experiments at the same time,
+        ValueError (values out of range)
+    """
+    def __init__(self, mode, clock_input, edge=1,
+                 npoints=10, continuous=False, buffersize=1000):
+
+        if not 1 <= clock_input <= 4:
+            raise ValueError('Invalid clock_input')
+
+        if edge not in [0, 1]:
+            raise ValueError('Invalid edge')
+
+        if type(mode) == int and not 0 <= mode <= 5:
+            raise ValueError('Invalid mode')
+
+        if not 0 <= npoints < 65536:
+            raise ValueError('npoints out of range')
+
+        if not 1 <= buffersize <= 20000:
+            raise ValueError('Invalid buffer size')
+
+        if mode == 1 and clock_input != 4:
+            raise ValueError('Analog output must use DataChannel 4')
+
+        self.number = clock_input
+        self.edge = edge
+        self.mode = mode
+        self.npoints = npoints
+        self.continuous = continuous
+
+        self.ring_buffer = deque(maxlen=buffersize)
+        self.mutex_ring_buffer = Lock()
+        self.analog_setup()
+        self.trigger_setup()
+
+
+class DAQBurst(DAQExperiment):
+    """Burst experiment.
+
+    :param mode: Define data source or destination (use :class:`.ExpMode`).
+    :param period: Period of the stream experiment (microseconds) [1:65536]
+    :param npoints: Total number of points for the experiment [0:65536]
+    :param continuous: Indicates if the experiment is continuous
+        (False: run once, True: continuous).
+    :param buffersize: Buffer size
+    :raises: LengthError (too many experiments at the same time), ValueError
+        (values out of range)
+    """
+    def __init__(self, mode, period, npoints=10,
+                 continuous=False, buffersize=4000):
+
+        if not 100 <= period <= 65535:
+            raise ValueError('Invalid period')
+
+        if not 0 <= npoints < 65536:
+            raise ValueError('npoints out of range')
+
+        if type(mode) == int and not 0 <= mode <= 1:
+            raise ValueError('Invalid mode')
+
+        self.number = 1
+        self.period = period
+        self.npoints = npoints
+        self.continuous = continuous
+        self.mode = mode
+
+        self.ring_buffer = deque(maxlen=buffersize)
+        self.mutex_ring_buffer = Lock()
+        self.analog_setup()
+        self.trigger_setup()

@@ -13,7 +13,7 @@ else:
 if len(sys.argv) > 2:
     channel = sys.argv[2] - 1
 else:
-    channel = 0    
+    channel = 0
 
 x = []
 y = []
@@ -30,14 +30,14 @@ print "y ", y
 
 new_corr, new_offset = np.polyfit(x, y, 1)
 print new_corr, new_offset
-		
+
 dq = DAQ("COM3")
 time.sleep(.05)
 
 dac_corr, dac_offset = dq.get_dac_cal()
 
 dac_corr[channel] *= new_corr
-dac_offset[channel] += new_offset 
+dac_offset[channel] += new_offset
 
 """
 dac_corrs = [1.0]

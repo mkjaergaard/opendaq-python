@@ -1,23 +1,19 @@
+from __future__ import print_function
 from opendaq import *
-from opendaq.daq import *
 import time
 
 # Connect to the device
 # change for the Serial port in which openDAQ is connected
-dq = DAQ("COM3")
+daq = DAQ('/dev/ttyUSB0')
 
+daq.init_capture(12500)
 
-dq.init_capture(12500)
-i = 0
-
-while i < 20:
+for i in range(20):
     try:
         time.sleep(1)
-        i = i + 1  
-        a = dq.get_capture(2)   # 2: full period
-        print "T: ", 1 / (a[1] / 1000.)
+        a = daq.get_capture(2)   # 2: full period
+        print("T: ", 1000. / a[1])
     except KeyboardInterrupt:
-        dq.close()
+        daq.close()
 
-
-dq.stop()
+daq.stop()

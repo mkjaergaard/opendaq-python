@@ -13,7 +13,7 @@ else:
 if len(sys.argv) > 2:
     channel = sys.argv[2] - 1
 else:
-    channel = 0    
+    channel = 0
 
 x = []
 y = []
@@ -28,7 +28,7 @@ with open(filename, 'r+') as f:
 new_corr, new_offset = np.polyfit(x, y, 1)
 
 
-		
+
 dq = DAQ("COM3")
 time.sleep(.05)
 
@@ -72,7 +72,7 @@ print "Load DAC calibration from file:"
 dac_corr, dac_offset = dq.get_dac_cal()
 
 dac_corr[channel] *= new_corr
-dac_offset[channel] += new_offset 
+dac_offset[channel] += new_offset
 
 dq.set_dac_cal(dac_corr,dac_offset)
 dq.get_dac_cal()
@@ -118,7 +118,7 @@ adc_offsets = offsets_ampli + offsets_chp
 adc_corrs = [1.0]*dq.model.adc_slots
 
 dq.set_adc_cal(adc_corrs, adc_offsets)
-    
+
 adc_corrs, adc_offsets = dq.get_adc_cal()
 print "b= ", adc_offsets, "\n"
 
@@ -133,7 +133,7 @@ for i in dq.model.pinput_range:
     time.sleep(0.05)
     value = dq.read_analog()
     adc_corrs[i-1] = value
-    print i,"-->", "%0.4f"%value 
+    print i,"-->", "%0.4f"%value
 
 print adc_corrs
 dq.set_adc_cal(adc_corrs, adc_offsets)
@@ -152,7 +152,7 @@ for i in range(dq.model.adc_slots):
     outputfile.write("%1.1f "%adc_offsets[i])
 outputfile.write("]\r\n")
 
-    
+
 print "\n------------------------------\n"
 print "CALIBRATION TEST\n"
 
