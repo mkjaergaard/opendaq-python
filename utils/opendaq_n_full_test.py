@@ -4,6 +4,16 @@ from opendaq import *
 import time
 import sys
 import numpy as np
+from distutils.util import strtobool
+
+def user_yes_no_query(question):
+    print '%s [y/n]\n' % question
+    while True:
+        try:
+            return strtobool(raw_input().lower())
+        except ValueError:
+            print "Please respond with \'y\' or \'n\'.\n"
+
 
 if len(sys.argv) < 2:
     filename="calibration.txt"
@@ -35,7 +45,7 @@ time.sleep(.05)
 print "## OPENDAQ [N] FULL TEST ##\n"
 dq.device_info()
 
-refserial = dq.model.serial_str()
+refserial = dq.model.serial_str
 
 outputname = './REPORT_'+refserial+'_'+time.strftime('%y%m%d')+'.txt'
 outputfile = open(outputname,'w')
@@ -44,8 +54,8 @@ outputfile.write("### CALIBRATION REPORT ###\r\n")
 outputfile.write(time.strftime('Date: %d/%m/%Y\nTime: %X\r\n'))
 
 outputfile.write("Serial number: %s\r\n"%refserial)
-outputfile.write("Hardware Version: %s\n"%dq.model.hw_ver())
-outputfile.write("Firmware Version: %d\r\n"%dq.model.fw_ver())
+outputfile.write("Hardware Version: %s\n"%dq.model.model_str)
+outputfile.write("Firmware Version: %d\r\n"%dq.model.fw_ver)
 
 
 
@@ -77,8 +87,13 @@ dac_offset[channel] += new_offset
 dq.set_dac_cal(dac_corr,dac_offset)
 dq.get_dac_cal()
 
-outputfile.write("\r\nDAC calibration:\nm=%1.3f\n"%new_corr)
-outputfile.write("b=%1.3f\r\n"%new_offset)
+outputfile.write("\r\nLoad values from file:\nx=")
+for i in range(len(x)):
+    outputfile.write("%1.1f "%x[i])
+outputfile.write("\ny=")
+for i in range(len(y)):
+    outputfile.write("%1.4f "%y[i])
+
 print "DAC:\nm=%1.3f\n"%new_corr
 print "b=%1.3f\r\n"%new_offset
 
@@ -144,7 +159,7 @@ adc_corrs, adc_offsets = dq.get_adc_cal()
 print "ADC calibration:\nm= ", adc_corrs, "\n"
 print "b= ", adc_offsets, "\n"
 
-outputfile.write("\r\nADC calibration:\nm= [")
+outputfile.write("\r\n\nADC calibration:\nm= [")
 for i in range(dq.model.adc_slots):
     outputfile.write("%1.4f "%adc_corrs[i])
 outputfile.write("]\nb= [")
@@ -154,9 +169,24 @@ outputfile.write("]\r\n")
 
 
 print "\n------------------------------\n"
-print "CALIBRATION TEST\n"
+print "DAC CALIBRATION TEST\n"
 
-outputfile.write("\r\nCALIBRATION TEST:\n")
+outputfile.write("\r\nDAC CALIBRATION TEST:\n")
+
+for i in [-3, -1, 1, 3]:
+    dq.set_analog(i)
+    print "\n Setting",i," Volts..."
+    outputfile.write("\nSet DAC= %1.1fV -> "%i)
+    time.sleep(.5)
+    if user_yes_no_query("Is the voltage correct?"):
+        outputfile.write("OK")
+    else:
+        outputfile.write("ERROR")        
+
+print "\n------------------------------\n"
+print "ADC CALIBRATION TEST\n"
+
+outputfile.write("\r\n\nADC CALIBRATION TEST:\n")
 
 for ampli in dq.model.adc_gain_range():
     print "\nGain range:",ampli, "-> x", "%0.3f"%dq.model.adc_base_ampli[ampli], "\n"

@@ -14,3 +14,5 @@ print "Voltage Set: ",volts
 dq.set_analog(volts)
 
 dq.close()
+
+
