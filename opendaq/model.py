@@ -267,16 +267,16 @@ class ModelN(DAQModel):
         return round((raw - offset) * base_gain * gain, 5)
 
 
-class ModelTP8(DAQModel):
+class ModelTP08(DAQModel):
     _id = 10
 
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(self, fw_ver, serial)
-        self.model_str = "TP8x"
-        self.serial_str = "TP8x10%04d" % self.serial
-        self.pio_slots = 6
+        self.model_str = "TP08"
+        self.serial_str = "TP08x10%04d" % self.serial
+        self.pio_slots = 4
 
-        self.adc_slots = 12
+        self.adc_slots = 8
         self.adc_gains = []
         self.adc_offsets = []
         self.adc_base_ampli = [1, 2, 4, 8, 16, 32, 64, 128]
@@ -288,6 +288,45 @@ class ModelTP8(DAQModel):
         self.ninput_range = [0]
 
         self.dac_slots = 4
+        self.dac_gains = []
+        self.dac_offsets = []
+        self.dac_base_gain = 1.25/32768.
+        self.min_dac_value = -1.25
+        self.max_dac_value = 1.25
+
+    def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
+        """Convert a raw value to a value in volts.
+
+        :param raw: Value to convert to volts.
+        :param gain_id: ID of the analog configuration setup.
+        """
+        base_gain = 1./(self.adc_base_gain * self.adc_base_ampli[gain_id])
+        gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
+        offset = (self.adc_offsets[pinput-1] * self.adc_base_ampli[gain_id] +
+                  self.adc_offsets[4+gain_id])
+        return (raw - offset)*base_gain*gain
+
+class ModelTP04(DAQModel):
+    _id = 11
+
+    def __init__(self, fw_ver, serial):
+        DAQModel.__init__(self, fw_ver, serial)
+        self.model_str = "TP04"
+        self.serial_str = "TP04x10%04d" % self.serial
+        self.pio_slots = 2
+
+        self.adc_slots = 4
+        self.adc_gains = []
+        self.adc_offsets = []
+        self.adc_base_ampli = [1, 2, 4]
+        self.adc_base_gain = 32768/24.0
+        self.min_adc_value = -24.0
+        self.max_adc_value = 24.0
+
+        self.pinput_range = list(range(1, 2))
+        self.ninput_range = [0]
+
+        self.dac_slots = 2
         self.dac_gains = []
         self.dac_offsets = []
         self.dac_base_gain = 1.25/32768.
