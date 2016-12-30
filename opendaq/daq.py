@@ -27,7 +27,7 @@ import threading
 from enum import IntEnum
 from .common import check_crc, check_stream_crc, mkcmd
 from .common import LengthError, CRCError
-from .model import get_model, PGAGain
+from .model import get_model
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
 
@@ -35,6 +35,22 @@ BAUDS = 115200
 NAK = mkcmd(160, '')
 MAX_CHANNELS = 4
 
+
+class PGAGain(IntEnum):
+    """Valid PGA gains."""
+    X033 = 0
+    X1 = 1
+    X2 = 2
+    X10 = 3
+    X100 = 4
+    S_X1 = 0
+    S_X2 = 1
+    S_X4 = 2
+    S_X5 = 3
+    S_X8 = 4
+    S_X10 = 5
+    S_X16 = 6
+    S_X20 = 7
 
 class LedColor(IntEnum):
     """Valid LED colors."""
@@ -120,9 +136,9 @@ class DAQ(threading.Thread):
         if len(ret) != ret_len:
             raise LengthError("Bad packet length %d (it should be %d)" %
                               (len(ret), ret_len))
-        if data[1] != ret_len-4:
+        if data[1] != ret_len - 4:
             raise LengthError("Bad body length %d (it should be %d)" %
-                              (ret_len-4, data[1]))
+                              (ret_len - 4, data[1]))
         # Strip 'command' and 'length' values from returned data
         return data[2:]
 
@@ -163,8 +179,8 @@ class DAQ(threading.Thread):
 
         for i in self.model.dac_coef_range():
             _, corr, offset = self.__get_calibration(i)
-            gains.append(1. + corr/(1.*2**16))
-            offsets.append(offset*1./(2**16))
+            gains.append(1. + corr / (1. * 2 ** 16))
+            offsets.append(offset * 1. / (2 ** 16))
         self.model.dac_gains = gains
         self.model.dac_offsets = offsets
         return gains, offsets
@@ -181,8 +197,8 @@ class DAQ(threading.Thread):
         offsets = []
         for i in self.model.adc_coef_range('ALL'):
             _, corr, offset = self.__get_calibration(i)
-            gains.append(1. + corr/(1.*(2**16)))
-            offsets.append(offset*1./(2**5))
+            gains.append(1. + corr / (1. * (2 ** 16)))
+            offsets.append(offset * 1. / (2 ** 5))
         self.model.adc_gains = gains
         self.model.adc_offsets = offsets
         return gains, offsets
@@ -590,7 +606,7 @@ class DAQ(threading.Thread):
         if not type(mode) is Trigger:
             raise ValueError("Invalid trigger mode")
 
-        if 1 <= mode <= 6 and not value in [0, 1]:
+        if 1 <= mode <= 6 and value not in [0, 1]:
             raise ValueError("Invalid value of digital trigger")
 
         self.send_command(mkcmd(33, 'BBH', number, mode, value), 'BBH')
@@ -686,7 +702,7 @@ class DAQ(threading.Thread):
     def clear_experiments(self):
         """Delete the whole experiment list."""
         for i in range(len(self.__exp))[::-1]:
-            self.__destroy_channel(i+1)
+            self.__destroy_channel(i + 1)
             del(self.__exp[i])
 
     def __dchanindex(self):
@@ -886,7 +902,7 @@ class DAQ(threading.Thread):
                 # openDAQ sent a stop command
                 ret = self.ser.read(2)
                 char, ch = struct.unpack('!BB', ret)
-                channel.append(ch-1)
+                channel.append(ch - 1)
                 return 3
         self.data_length = self.header[3] - 4
         while len(self.data) < self.data_length:
@@ -900,11 +916,11 @@ class DAQ(threading.Thread):
             else:
                 self.data.append(char[0])
         for i in range(0, self.data_length, 2):
-            value = (self.data[i] << 8) | self.data[i+1]
+            value = (self.data[i] << 8) | self.data[i + 1]
             if value >= 32768:
                 value -= 65536
             data.append(int(value))
-            channel.append(self.header[4]-1)
+            channel.append(self.header[4] - 1)
         check_stream_crc(self.header, self.data)
         return 1
 
@@ -993,7 +1009,7 @@ class DAQ(threading.Thread):
                         # data available
                         available, used = self.__dchanindex()
                         for i in range(len(channel)):
-                            exp = self.__exp[used.index(channel[i]+1)]
+                            exp = self.__exp[used.index(channel[i] + 1)]
                             gain_id, pinput, ninput, _ = exp.get_parameters()
                             exp.add_point(self.model.raw_to_volts(
                                 data[i], gain_id, pinput, ninput))

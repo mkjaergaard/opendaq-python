@@ -22,4 +22,4 @@ from __future__ import absolute_import
 from .daq import DAQ, LedColor, ExpMode, PGAGain, Trigger
 
 __version__ = '0.2.0'
-__all__ = ['DAQ']
+__all__ = ['DAQ', 'LedColor', 'ExpMode', 'PGAGain', 'Trigger']

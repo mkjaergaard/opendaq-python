@@ -24,23 +24,6 @@ from __future__ import division
 from enum import IntEnum
 
 
-class PGAGain(IntEnum):
-    """Valid PGA gains."""
-    X033 = 0
-    X1 = 1
-    X2 = 2
-    X10 = 3
-    X100 = 4
-    S_X1 = 0
-    S_X2 = 1
-    S_X4 = 2
-    S_X5 = 3
-    S_X8 = 4
-    S_X10 = 5
-    S_X16 = 6
-    S_X20 = 7
-
-
 class DAQModel(object):
     _id = 0
 
@@ -145,11 +128,11 @@ class ModelM(DAQModel):
         """
         base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
 
-        adc_chp_slot = pinput-1
-        adc_gain_slot = len(self.pinput_range)+gain_id
+        adc_chp_slot = pinput - 1
+        adc_gain_slot = len(self.pinput_range) + gain_id
 
-        gain = 1./(self.adc_gains[adc_chp_slot] *
-                   self.adc_gains[adc_gain_slot])
+        gain = 1. / (self.adc_gains[adc_chp_slot] *
+                     self.adc_gains[adc_gain_slot])
         offset = (self.adc_offsets[adc_chp_slot] *
                   self.adc_base_ampli[gain_id] +
                   self.adc_offsets[adc_gain_slot])
@@ -190,10 +173,10 @@ class ModelS(DAQModel):
         :param raw: Value to convert to volts.
         :param gain_id: ID of the analog configuration setup.
         """
-        adc_chp_slot = pinput-1
+        adc_chp_slot = pinput - 1
         if ninput != 0:
             adc_chp_slot += 8
-        base_gain = 1./(self.adc_base_gain * self.adc_base_ampli[gain_id])
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
         gain = self.adc_gains[adc_chp_slot]
         offset = self.adc_offsets[adc_chp_slot]
         return round((raw - offset) * base_gain / gain, 4)
@@ -205,18 +188,19 @@ class ModelS(DAQModel):
             raise ValueError("Invalid gain selection")
         if xgain > 0 and ninput == 0:
             raise ValueError("Invalid gain selection")
-        if ninput != 0 and (pinput % 2 == 0 and ninput != pinput - 1
-                            or pinput % 2 != 0 and ninput != pinput + 1):
+        if ninput != 0 and (pinput % 2 == 0 and ninput != pinput - 1 or
+                            pinput % 2 != 0 and ninput != pinput + 1):
                     raise ValueError("Invalid negative input selection")
 
     def adc_coef_range(self, flag):
         if flag == 'SE':
-            return list(range(self.dac_slots, self.dac_slots+self.adc_slots / 2))
+            return list(range(self.dac_slots, self.dac_slots +
+                                self.adc_slots / 2))
         elif flag == 'DE':
             return list(range(self.dac_slots + self.adc_slots / 2,
                               self.dac_slots + self.adc_slots))
         elif flag == 'ALL':
-            return list(range(self.dac_slots, self.dac_slots+self.adc_slots))
+            return list(range(self.dac_slots, self.dac_slots + self.adc_slots))
         else:
             raise ValueError("Invalid flag")
 
@@ -244,7 +228,7 @@ class ModelN(DAQModel):
         self.dac_slots = 1
         self.dac_gains = []
         self.dac_offsets = []
-        self.dac_base_gain = 4.096/32768.
+        self.dac_base_gain = 4.096 / 32768.
         self.min_dac_value = -4.096
         self.max_dac_value = 4.095
 
@@ -280,17 +264,17 @@ class ModelTP08(DAQModel):
         self.adc_gains = []
         self.adc_offsets = []
         self.adc_base_ampli = [1, 2, 4, 8, 16, 32, 64, 128]
-        self.adc_base_gain = 32768/23.75
+        self.adc_base_gain = 32768 / 23.75
         self.min_adc_value = -23.75
         self.max_adc_value = 23.75
 
-        self.pinput_range = list(range(1, 4))
+        self.pinput_range = list(range(1, 5))
         self.ninput_range = [0]
 
         self.dac_slots = 4
         self.dac_gains = []
         self.dac_offsets = []
-        self.dac_base_gain = 1.25/32768.
+        self.dac_base_gain = 1.25 / 32768.
         self.min_dac_value = -1.25
         self.max_dac_value = 1.25
 
@@ -300,11 +284,11 @@ class ModelTP08(DAQModel):
         :param raw: Value to convert to volts.
         :param gain_id: ID of the analog configuration setup.
         """
-        base_gain = 1./(self.adc_base_gain * self.adc_base_ampli[gain_id])
-        gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
-        offset = (self.adc_offsets[pinput-1] * self.adc_base_ampli[gain_id] +
-                  self.adc_offsets[4+gain_id])
-        return (raw - offset)*base_gain*gain
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
+        gain = 1. / (self.adc_gains[pinput - 1])
+        offset = (self.adc_offsets[pinput - 1] * self.adc_base_ampli[gain_id])
+        return round((raw - offset) * base_gain * gain, 5)
+
 
 class ModelTP04(DAQModel):
     _id = 11
@@ -318,18 +302,18 @@ class ModelTP04(DAQModel):
         self.adc_slots = 4
         self.adc_gains = []
         self.adc_offsets = []
-        self.adc_base_ampli = [1, 2, 4]
-        self.adc_base_gain = 32768/24.0
+        self.adc_base_ampli = [1, 4]
+        self.adc_base_gain = 32768 / 24.0
         self.min_adc_value = -24.0
         self.max_adc_value = 24.0
 
-        self.pinput_range = list(range(1, 2))
+        self.pinput_range = list(range(1, 3))
         self.ninput_range = [0]
 
         self.dac_slots = 2
         self.dac_gains = []
         self.dac_offsets = []
-        self.dac_base_gain = 1.25/32768.
+        self.dac_base_gain = 1.25 / 32768.
         self.min_dac_value = -1.25
         self.max_dac_value = 1.25
 
@@ -339,11 +323,10 @@ class ModelTP04(DAQModel):
         :param raw: Value to convert to volts.
         :param gain_id: ID of the analog configuration setup.
         """
-        base_gain = 1./(self.adc_base_gain * self.adc_base_ampli[gain_id])
-        gain = 1./(self.adc_gains[pinput-1] * self.adc_gains[4+gain_id])
-        offset = (self.adc_offsets[pinput-1] * self.adc_base_ampli[gain_id] +
-                  self.adc_offsets[4+gain_id])
-        return (raw - offset)*base_gain*gain
+        base_gain = 1. / (self.adc_base_gain * self.adc_base_ampli[gain_id])
+        gain = 1. / (self.adc_gains[pinput - 1])
+        offset = (self.adc_offsets[pinput - 1] * self.adc_base_ampli[gain_id])
+        return round((raw - offset) * base_gain * gain, 5)
 
 
 def get_model(model_id, fw_ver, serial):
