@@ -365,9 +365,9 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        self.model.check_valid_adc_settings(pinput, ninput, int(gain))
+        self.model.check_valid_adc_settings(pinput, ninput, gain)
 
-        if not 0 <= nsamples < 255:
+        if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
 
         self.__gain = gain
@@ -658,7 +658,7 @@ class DAQ(threading.Thread):
 
         self.model.check_valid_adc_settings(pinput, ninput, int(gain))
 
-        if not 0 <= nsamples < 255:
+        if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
 
         return self.send_command(
