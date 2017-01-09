@@ -208,9 +208,9 @@ def exec_pio_test():
 
 parser = argparse.ArgumentParser()
 group = parser.add_mutually_exclusive_group()
-group.add_argument("-df", "--dac_file", default="calibration.txt",
+group.add_argument("-d", "--dac_file", default="calibration.txt",
                     help="Select file for loading DAC calibration (default calibration.txt)")
-parser.add_argument("-p", "--port", default="COM3",
+parser.add_argument("-p", "--port", default="/dev/ttyUSB0",
                     help="Select serial port name (default COM3)")
 parser.add_argument("-s", "--serial", type=int, help="Set serial number")
 parser.add_argument("-r", "--reset", help="Reset calibration", action="store_true")

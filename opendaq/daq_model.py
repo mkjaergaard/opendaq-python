@@ -20,14 +20,21 @@
 
 
 from __future__ import division
+import time
 from collections import namedtuple
 from enum import IntEnum
 
 
-CalibReg = namedtuple('CalibReg', ['gain', 'offset'])
 DAC = namedtuple('ADC', ['bits', 'vmin', 'vmax'])
 ADC = namedtuple('ADC', ['bits', 'vmin', 'vmax', 'pga_gains',
                          'pinputs', 'ninputs'])
+
+
+class CalibReg(namedtuple('CalibReg', ['gain', 'offset'])):
+    __slots__ = ()
+
+    def __str__(self):
+        return "gain: %.4f\toffset: %.2f" % (self.gain, self.offset)
 
 
 class PGAGains(IntEnum):
@@ -74,14 +81,8 @@ class DAQModel(object):
     def serial_str(self):
         return self.serial_fmt % self.serial
 
-    # def dac_coef_range(self):
-        # return list(range(self.dac_slots))
-
-    # def adc_coef_range(self, flag):
-        # return list(range(self.dac_slots, self.dac_slots + self.adc_slots))
-
-    def load_calibration(self, read_slot):
-        """Load calibration values.
+    def load_dac_calib(self, read_slot):
+        """Load DAC calibration values.
         :param read_slot: Callback function that returns the raw
             calibration values (gain and offset) of a slot, given its index.
         """
@@ -90,10 +91,41 @@ class DAQModel(object):
             gain, offset = read_slot(i)
             self.dac_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**16)
 
+    def load_adc_calib(self, read_slot):
         time.sleep(.05)
         for i in range(len(self.adc_calib)):
             gain, offset = read_slot(i + len(self.dac_calib))
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
+
+    def write_dac_calib(self, regs, write_slot):
+        """Write DAC calibration values.
+        :param regs: A list of CalibReg objects.
+        :param write_slot: Callback function that writes a calibration slot
+            into the OpenDAQ device, given its index, gain and offset (int16).
+        """
+        if len(regs) != len(self.dac_calib):
+            raise IndexError("Invalid number of calibration registers")
+
+        time.sleep(.05)
+        for i, reg in enumerate(regs):
+            if type(reg) is not CalibReg:
+                raise ValueError("Registers must be instances of CalibReg")
+
+            write_slot(i, (reg.gain - 1.)*2**16, reg.offset*2**16)
+            self.daq_calib[i] = reg
+
+    def write_adc_calib(self, regs, write_slot):
+        if len(regs) != len(self.adc_calib):
+            raise IndexError("Invalid number of calibration registers")
+
+        time.sleep(.05)
+        for i, reg in enumerate(regs):
+            if type(reg) is not CalibReg:
+                raise ValueError("Registers must be instances of CalibReg")
+
+            j = i + len(self.dac_calib)
+            write_slot(j, (reg.gain - 1.)*2**16, reg.offset*2**5)
+            self.adc_calib[i] = reg
 
     def check_pio(self, number):
         if not (1 <= number <= self.npios):

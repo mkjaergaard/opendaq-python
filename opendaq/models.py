@@ -25,6 +25,7 @@ from collections import namedtuple
 
 
 class Gains:
+    """Valid PGA gains by OpenDAQ model."""
     M = PGAGains.new([1./3, 1, 2, 10, 100])
     S = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 20])
     N = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 20])
@@ -48,6 +49,10 @@ class ModelM(DAQModel):
         )
 
     def _get_adc_slots(self, gain_id, pinput, ninput):
+        """There are 13 calibration slots:
+         - 8 slots, one for every pinput
+         - 5 slots, one for every PGA gain.
+         """
         return pinput - 1, len(self.adc.pinputs) + gain_id
 
 
@@ -66,7 +71,20 @@ class ModelS(DAQModel):
                     ninputs=[0])
         )
 
+    def check_adc_settings(self, pinput, ninput, gain):
+        DAQModel.check_adc_settings(self, pinput, ninput, gain)
+
+        if gain > 0 and ninput == 0:
+            raise ValueError("Invalid gain selection")
+        if ninput != 0 and (pinput % 2 == 0 and ninput != pinput - 1 or
+                            pinput % 2 != 0 and ninput != pinput + 1):
+            raise ValueError("Invalid negative input selection")
+
     def _get_adc_slots(self, gain_id, pinput, ninput):
+        """There are 16 calibration slots:
+          - Single-ended mode: use the first 8 slots
+          - Differential mode: use the last 8 slots
+         """
         offs = 0 if ninput == 0 else 8
         return pinput - 1 + offs, -1
 

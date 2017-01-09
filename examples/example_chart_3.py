@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from opendaq.daq import DAQ, ANALOG_INPUT, ANALOG_OUTPUT, GAIN_S_X1
 
 # Change to the serial port in wich openDAQ is actually connected
-dq = DAQ("COM3")
+dq = DAQ('/dev/ttyUSB0')
 
 # Configure the first experiment, the one that will be plotted
 data_rate = 20

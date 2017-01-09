@@ -1,5 +1,6 @@
 import unittest
 from opendaq.models import DAQModel, Gains, ModelM
+from opendaq.daq_model import CalibReg
 
 
 class TestModelM(unittest.TestCase):
@@ -37,6 +38,24 @@ class TestModelM(unittest.TestCase):
         assert m.raw_to_volts(-32768, 0, 1, 0) == -4.096*3
         assert m.raw_to_volts(32768, 1, 1, 0) == 4.096
         assert m.raw_to_volts(-32768, 1, 1, 0) == -4.096
+
+    def test_adc_calib(self):
+        m = ModelM(140, 123)
+
+        m.adc_calib[0] = CalibReg(1.0, 80)
+        m.adc_calib[9] = CalibReg(1.0, 80)
+        assert m.raw_to_volts(0, 1, 1, 0) == -0.02
+
+        m.adc_calib[0] = CalibReg(1.1, 0)
+        m.adc_calib[9] = CalibReg(1.1, 0)
+        out = 8000*(4.096/32768)/1.1/1.1
+        assert abs(m.raw_to_volts(8000, 1, 1, 0) - out) < 1e-8
+
+    def test_dac_calib(self):
+        m = ModelM(140, 123)
+
+        m.dac_calib[0] = CalibReg(1.0, -0.1)
+        assert m.volts_to_raw(0, 0) == 800
 
     def test_volts_to_raw(self):
         m = ModelM(140, 123)

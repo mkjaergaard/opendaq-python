@@ -67,10 +67,11 @@ class DAQ(threading.Thread):
 
         self.open()
 
-        self.model = DAQModel.new(*self.get_info())
-        self.hw_ver = self.model.model_str
-        self.fw_ver = self.model.fw_ver
-        self.model.load_calibration(self.__read_calib_slot)
+        self.__model = DAQModel.new(*self.get_info())
+        self.hw_ver = self.__model.model_str
+        self.fw_ver = self.__model.fw_ver
+        self.__model.load_dac_calib(self.__read_calib_slot)
+        self.__model.load_adc_calib(self.__read_calib_slot)
 
     def open(self):
         """Open the serial port."""
@@ -131,75 +132,56 @@ class DAQ(threading.Thread):
         return self.send_command(mkcmd(55, 'B', int(bool(on))), 'B')[0]
 
     def __read_calib_slot(self, slot):
-        """Read device calibration for a given gain.
+        """Read a calibration slot.
 
-        :param slot: Calibration slot number.
+        :param slot_id: Number of the calibration slot.
         :returns:
-            - Gain raw correction
-            - Offset raw correction
+            - Gain raw correction (signed 16-bit integer)
+            - Offset raw correction (signed 16-bit integer)
         :raises: ValueError
         """
-        return self.send_command(mkcmd(36, 'B', slot), 'Bhh')
+        return self.send_command(mkcmd(36, 'B', slot), 'Bhh')[1:]
 
-    def get_dac_cal(self):
-        """Read DAC calibration.
+    def __write_calib_slot(self, slot_id, gain, offset):
+        """Write a calibration slot.
+
+        :param slot_id: Number of the calibration slot.
+        :param gain: Gain raw correction (signed 16-bit integer).
+        :param offset: Offset raw correction (signed 16-bit integer).
+        :raises: ValueError
+        """
+        return self.send_command(mkcmd(37, 'Bhh', slot_id,
+                                       int(gain), int(offset)), 'Bhh')
+
+    def get_dac_calib(self):
+        """Get the DAC calibration.
 
         :returns: List of DAC calibration registers
         """
-        return self.model.dac_calib
+        return list(self.__model.dac_calib) # return a copy of the list
 
-    def get_adc_cal(self):
-        """Read ADC calibration values for all the available device
-        configurations.
+    def get_adc_calib(self):
+        """Get the ADC calibration.
 
         :returns: List of ADC calibration registers
         """
-        return self.model.adc_calib
+        return list(self.__model.adc_calib) # return a copy of the list
 
-    '''
-    def __set_calibration(self, slot_id, corr, offset):
-        """Set device calibration.
-
-        :param gain_id: ID of the analog configuration setup.
-        :param corr: Gain correction: G = Gbase*(1 + corr/100000).
-        :param offset: Offset raw value (-32768 to 32767).
-        :raises: ValueError
-        """
-        if (slot_id not in self.model.dac_coef_range() and
-                slot_id not in self.model.adc_coef_range('ALL')):
-            raise ValueError("gain_id out of range")
-
-        return self.send_command(mkcmd(37, 'Bhh', slot_id, corr, offset), 'Bhh')
-
-    def set_dac_cal(self, corrs, offsets):
+    def set_dac_calib(self, regs):
         """Set the DAC calibration.
 
-        :param corrs: Gain corrections (0.9 to 1.1).
-        :param offset: Offset value in volts(-32768 to 32767).
-        :raises: ValueError
+        :param regs: A list of CalibReg objects.
+        :raises: ValueError, IndexError
         """
+        self.__model.write_dac_calib(regs, self.__write_calib_slot)
 
-        valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
-        valuesb = [int(round(c*(2**16))) for c in offsets]
-
-        for i in self.model.dac_coef_range():
-            self.__set_calibration(i, valuesm[i], valuesb[i])
-
-    def set_adc_cal(self, corrs, offsets, flag='ALL'):
+    def set_adc_calib(self, regs):
         """Set the ADC calibration.
 
-        :param corrs: Gain corrections (0.9 to 1.1).
-        :param offsets: Offset raw value (-32768 to 32767).
-        :param flag: 'ALL', 'SE' or 'DE' (only for 'S' model).
-        :raises: ValueError
+        :param regs: A list of CalibReg objects.
+        :raises: ValueError, IndexError
         """
-
-        valuesm = [int(round((c - 1)*(2**16))) for c in corrs]
-        valuesb = [int(c*(2**5)) for c in offsets]
-
-        for i, j in enumerate(self.model.adc_coef_range(flag)):
-            self.__set_calibration(j, valuesm[i], valuesb[i])
-    '''
+        self.__model.write_adc_calib(regs, self.__write_calib_slot)
 
     def set_id(self, id):
         """Identify openDAQ device.
@@ -223,8 +205,8 @@ class DAQ(threading.Thread):
         return ("Hardware version: %s\n"
                 "Firmware version: %s\n"
                 "Serial number: %s" %
-                (self.model.model_str, self.model.fw_ver,
-                 self.model.serial_str))
+                (self.__model.model_str, self.__model.fw_ver,
+                 self.__model.serial_str))
 
     def read_eeprom(self, pos):
         """Read a byte from the EEPROM.
@@ -265,7 +247,7 @@ class DAQ(threading.Thread):
         :param volts: DAC output value in volts.
         :raises: ValueError
         """
-        self.set_dac(self.model.volts_to_raw(volts, number-1), number)
+        self.set_dac(self.__model.volts_to_raw(volts, number-1), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value.
@@ -280,8 +262,8 @@ class DAQ(threading.Thread):
         :returns: Voltage value.
         """
         value = self.send_command(mkcmd(1, ''), 'h')[0]
-        return self.model.raw_to_volts(value, self.__gain,
-                                       self.__pinput, self.__ninput)
+        return self.__model.raw_to_volts(value, self.__gain, self.__pinput,
+                                         self.__ninput)
 
     def read_all(self, nsamples=20, gain=0):
         """Read data from all analog inputs
@@ -290,11 +272,12 @@ class DAQ(threading.Thread):
         :param gain: Analog gain (default=1)
         :returns: Values[0:7]: List of the analog reading on each input
         """
-        if self.model.fw_ver < 120:
+        if self.__model.fw_ver < 120:
             raise Warning("Function not implemented in this FW. Try updating")
 
         values = self.send_command(mkcmd(4, 'BB', nsamples, gain), '8h')
-        return [self.model.raw_to_volts(v, gain, i, 0) for i, v in enumerate(values)]
+        return [self.__model.raw_to_volts(v, gain, i, 0) for i, v in
+                enumerate(values)]
 
     def conf_adc(self, pinput=8, ninput=0, gain=0, nsamples=20):
         """Configure the analog-to-digital converter.
@@ -308,7 +291,7 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        self.model.check_valid_adc_settings(pinput, ninput, gain)
+        self.__model.check_adc_settings(pinput, ninput, gain)
 
         if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
@@ -330,8 +313,8 @@ class DAQ(threading.Thread):
         if not type(color) is LedColor:
             raise ValueError("Invalid color value")
 
-        if not 1 <= number <= 4:
-            raise ValueError("Invalid led number")
+        if not 1 <= number <= self.__model.nleds:
+            raise ValueError("Invalid LED number")
 
         self.send_command(mkcmd(18, 'BB', color.value, number), 'BB')[0]
 
@@ -343,7 +326,7 @@ class DAQ(threading.Thread):
         :param value: digital value (0: low, 1: high)
         :raises: ValueError
         """
-        self.model.check_pio(number)
+        self.__model.check_pio(number)
 
         if value not in [0, 1]:
             raise ValueError("digital value out of range")
@@ -357,7 +340,7 @@ class DAQ(threading.Thread):
         :returns: Read value.
         :raises: ValueError
         """
-        self.model.check_pio(number)
+        self.__model.check_pio(number)
 
         return self.send_command(mkcmd(3, 'B', number), 'BB')[1]
 
@@ -369,7 +352,7 @@ class DAQ(threading.Thread):
         :param output: PIO direction (0 input, 1 output).
         :raises: ValueError
         """
-        self.model.check_pio(number)
+        self.__model.check_pio(number)
 
         if output not in [0, 1]:
             raise ValueError("PIO direction out of range")
@@ -383,7 +366,7 @@ class DAQ(threading.Thread):
         :param value: Port output byte (bits: 0:low, 1:high).
         :raises: ValueError
         """
-        self.model.check_port(value)
+        self.__model.check_port(value)
         self.send_command(mkcmd(7, 'B', value), 'B')[0]
 
     def read_port(self):
@@ -400,7 +383,7 @@ class DAQ(threading.Thread):
         :param output: Port directions byte (bits: 0:input, 1:output).
         :raises: ValueError
         """
-        self.model.check_port(output)
+        self.__model.check_port(output)
         self.send_command(mkcmd(9, 'B', output), 'B')
 
     def spi_config(self, cpol, cpha):
@@ -599,7 +582,7 @@ class DAQ(threading.Thread):
         if not type(mode) is ExpMode:
             raise ValueError("Invalid mode")
 
-        self.model.check_adc_settings(pinput, ninput, int(gain))
+        self.__model.check_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
@@ -801,7 +784,7 @@ class DAQ(threading.Thread):
         values = []
         self.set_analog(pr_data[0])
         for volts in pr_data:
-            raw = self.model.volts_to_raw(volts, 0)
+            raw = self.__model.volts_to_raw(volts, 0)
             values.append(raw)
         return self.send_command(mkcmd(23, 'h%dH' % len(values),
                                        pr_of, *values), 'Bh')
@@ -941,8 +924,7 @@ class DAQ(threading.Thread):
     def run(self):
         """Thread loop.
 
-        The procedure stores the experiment data automatically sent from the
-        device after start().
+        Store the experiment data sent by the device after calling start().
         """
         while True:
             while self.__running:
@@ -956,7 +938,7 @@ class DAQ(threading.Thread):
                         for i in range(len(channel)):
                             exp = self.__exp[used.index(channel[i] + 1)]
                             gain_id, pinput, ninput, _ = exp.get_parameters()
-                            exp.add_point(self.model.raw_to_volts(
+                            exp.add_point(self.__model.raw_to_volts(
                                 data[i], gain_id, pinput, ninput))
 
                     elif result == 3:

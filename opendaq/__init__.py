@@ -21,6 +21,7 @@
 from __future__ import absolute_import
 from .daq import DAQ, LedColor, ExpMode, Trigger
 from .models import Gains
+from .daq_model import CalibReg
 
 __version__ = '0.2.0'
-__all__ = ['DAQ', 'LedColor', 'ExpMode', 'Trigger', 'Gains']
+__all__ = ['DAQ', 'LedColor', 'ExpMode', 'Trigger', 'Gains', 'CalibReg']

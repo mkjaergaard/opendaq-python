@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 import time
-from opendaq.daq import DAQ, ExpMode, PGAGain
+from opendaq import DAQ, ExpMode, Gains
 
 # Connect to the device
 # Change here the serial port in which the openDAQ is connected
@@ -12,10 +12,10 @@ daq = DAQ('/dev/ttyUSB0')
 daq.set_analog(0.9)
 
 stream1 = daq.create_stream(ExpMode.ANALOG_IN, 200, continuous=True)
-stream1.analog_setup(pinput=8, gain=PGAGain.S_X1)
+stream1.analog_setup(pinput=8, gain=Gains.S.x1)
 
 stream2 = daq.create_stream(ExpMode.ANALOG_IN, 300, continuous=True)
-stream2.analog_setup(pinput=7, gain=PGAGain.S_X1)
+stream2.analog_setup(pinput=7, gain=Gains.S.x1)
 
 daq.start()
 
@@ -26,7 +26,7 @@ for i in range(4):
 
 daq.halt()
 
-stream2.analog_setup(pinput=6, gain=PGAGain.S_X1)
+stream2.analog_setup(pinput=6, gain=Gains.S.x1)
 
 print("start Again!")
 daq.start()

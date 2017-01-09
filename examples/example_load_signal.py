@@ -3,14 +3,14 @@ generate it through the analog output"""
 
 from __future__ import print_function
 import time
-from opendaq.daq import DAQ, ExpMode, PGAGain
+from opendaq import DAQ, ExpMode, Gains
 
 # Connect to the device
 # Change here the serial port in which the openDAQ is connected
 daq = DAQ('/dev/ttyUSB0')
 
 stream1 = daq.create_stream(ExpMode.ANALOG_IN, 300, npoints=16)
-stream1.analog_setup(pinput=8, gain=PGAGain.S_X1)
+stream1.analog_setup(pinput=8, gain=Gains.S.x1)
 
 # create a ramp signal with 4 samples
 signal = list(range(4))

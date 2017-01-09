@@ -19,7 +19,7 @@ plt.show()
 t = []
 data = []
 
-for i in range(1000):
+for i in range(100):
     try:
         dq.set_analog(i/100.0)  # we will plot a ramp line
 
