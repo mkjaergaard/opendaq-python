@@ -1,7 +1,5 @@
 import unittest
-# import struct
-from opendaq import *
-from opendaq.daq import *
+from opendaq import DAQ
 
 """
 Script for testing against the hardware
@@ -13,7 +11,7 @@ This tests needs a physical device and some connections to be made on it:
 
 class TestDAQHW(unittest.TestCase):
     def setUp(self):
-        self.daq = DAQ("COM3")
+        self.daq = DAQ('/dev/ttyUSB0')
 
     def tearDown(self):
         self.daq.close()
