@@ -27,30 +27,14 @@ import threading
 from enum import IntEnum
 from .common import check_crc, check_stream_crc, mkcmd
 from .common import LengthError, CRCError
-from .model import get_model
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
+from .models import DAQModel
 
 BAUDS = 115200
 NAK = mkcmd(160, '')
 MAX_CHANNELS = 4
 
-
-class PGAGain(IntEnum):
-    """Valid PGA gains."""
-    X033 = 0
-    X1 = 1
-    X2 = 2
-    X10 = 3
-    X100 = 4
-    S_X1 = 0
-    S_X2 = 1
-    S_X4 = 2
-    S_X5 = 3
-    S_X8 = 4
-    S_X10 = 5
-    S_X16 = 6
-    S_X20 = 7
 
 class LedColor(IntEnum):
     """Valid LED colors."""
@@ -83,13 +67,10 @@ class DAQ(threading.Thread):
 
         self.open()
 
-        self.model = get_model(*self.get_info())
-
-        # obtain calibration values
-        time.sleep(.05)
-        self.get_dac_cal()
-        time.sleep(.05)
-        self.get_adc_cal()
+        self.model = DAQModel.new(*self.get_info())
+        self.hw_ver = self.model.model_str
+        self.fw_ver = self.model.fw_ver
+        self.model.load_calibration(self.__read_calib_slot)
 
     def open(self):
         """Open the serial port."""
@@ -131,11 +112,11 @@ class DAQ(threading.Thread):
         if ret == NAK:
             raise IOError("NAK response received")
 
-        data = struct.unpack(fmt, check_crc(ret))
-
         if len(ret) != ret_len:
             raise LengthError("Bad packet length %d (it should be %d)" %
                               (len(ret), ret_len))
+
+        data = struct.unpack(fmt, check_crc(ret))
         if data[1] != ret_len - 4:
             raise LengthError("Bad body length %d (it should be %d)" %
                               (ret_len - 4, data[1]))
@@ -145,64 +126,37 @@ class DAQ(threading.Thread):
     def enable_crc(self, on):
         """Enable/Disable the cyclic redundancy check.
 
-        :param on: Enable CRC.
-        :raises: ValueError
+        :param on: Enable/disable CRC checking (bool).
         """
-        if on not in [0, 1]:
-            raise ValueError("on value out of range")
+        return self.send_command(mkcmd(55, 'B', int(bool(on))), 'B')[0]
 
-        return self.send_command(mkcmd(55, 'B', on), 'B')[0]
-
-    def __get_calibration(self, gain_id):
+    def __read_calib_slot(self, slot):
         """Read device calibration for a given gain.
 
-        :param gain_id: analog configuration.
+        :param slot: Calibration slot number.
         :returns:
-            - gain_id
-            - Gain raw correction x100000
-            - Offset raw correction (ADUs)
+            - Gain raw correction
+            - Offset raw correction
         :raises: ValueError
         """
-        if (gain_id not in self.model.dac_coef_range() and
-                gain_id not in self.model.adc_coef_range('ALL')):
-            raise ValueError("gain_id out of range")
-
-        return self.send_command(mkcmd(36, 'B', gain_id), 'Bhh')
+        return self.send_command(mkcmd(36, 'B', slot), 'Bhh')
 
     def get_dac_cal(self):
         """Read DAC calibration.
 
-        :returns: [gain, offset]
+        :returns: List of DAC calibration registers
         """
-        gains = []
-        offsets = []
-
-        for i in self.model.dac_coef_range():
-            _, corr, offset = self.__get_calibration(i)
-            gains.append(1. + corr / (1. * 2 ** 16))
-            offsets.append(offset * 1. / (2 ** 16))
-        self.model.dac_gains = gains
-        self.model.dac_offsets = offsets
-        return gains, offsets
+        return self.model.dac_calib
 
     def get_adc_cal(self):
         """Read ADC calibration values for all the available device
         configurations.
 
-        :returns:
-            - Gain corrections (0.9 to 1.1)
-            - Offsets (ADUs)
+        :returns: List of ADC calibration registers
         """
-        gains = []
-        offsets = []
-        for i in self.model.adc_coef_range('ALL'):
-            _, corr, offset = self.__get_calibration(i)
-            gains.append(1. + corr / (1. * (2 ** 16)))
-            offsets.append(offset * 1. / (2 ** 5))
-        self.model.adc_gains = gains
-        self.model.adc_offsets = offsets
-        return gains, offsets
+        return self.model.adc_calib
 
+    '''
     def __set_calibration(self, slot_id, corr, offset):
         """Set device calibration.
 
@@ -245,6 +199,7 @@ class DAQ(threading.Thread):
 
         for i, j in enumerate(self.model.adc_coef_range(flag)):
             self.__set_calibration(j, valuesm[i], valuesb[i])
+    '''
 
     def set_id(self, id):
         """Identify openDAQ device.
@@ -264,19 +219,12 @@ class DAQ(threading.Thread):
         """
         return self.send_command(mkcmd(39, ''), 'BBI')
 
-    def device_info(self):
-        """Prints device configuration."""
-        self.model.device_info()
-
-    @property
-    def hw_ver(self):
-        """Device hardware version ID."""
-        return self.model.model_str
-
-    @property
-    def fw_ver(self):
-        """Device firmware version."""
-        return self.model.fw_ver
+    def __str__(self):
+        return ("Hardware version: %s\n"
+                "Firmware version: %s\n"
+                "Serial number: %s" %
+                (self.model.model_str, self.model.fw_ver,
+                 self.model.serial_str))
 
     def read_eeprom(self, pos):
         """Read a byte from the EEPROM.
@@ -303,7 +251,6 @@ class DAQ(threading.Thread):
 
     def set_dac(self, raw, number=1):
         """Set DAC output (raw value).
-
         Set the raw value of the DAC.
 
         "param raw: Raw ADC value.
@@ -313,12 +260,7 @@ class DAQ(threading.Thread):
 
     def set_analog(self, volts, number=1):
         """Set DAC output (volts).
-        Set the output voltage of the DAC. Device calibration values are taken
-        into account.
-
-         - openDAQ[M] range: -4.096 V to +4.096 V
-
-         - openDAQ[S] range: 0 V to +4.096 V
+        Set the output voltage of the DAC.
 
         :param volts: DAC output value in volts.
         :raises: ValueError
@@ -338,7 +280,8 @@ class DAQ(threading.Thread):
         :returns: Voltage value.
         """
         value = self.send_command(mkcmd(1, ''), 'h')[0]
-        return self.model.raw_to_volts(value, self.__gain, self.__pinput, self.__ninput)
+        return self.model.raw_to_volts(value, self.__gain,
+                                       self.__pinput, self.__ninput)
 
     def read_all(self, nsamples=20, gain=0):
         """Read data from all analog inputs
@@ -400,7 +343,7 @@ class DAQ(threading.Thread):
         :param value: digital value (0: low, 1: high)
         :raises: ValueError
         """
-        self.model.check_valid_pio(number)
+        self.model.check_pio(number)
 
         if value not in [0, 1]:
             raise ValueError("digital value out of range")
@@ -414,7 +357,7 @@ class DAQ(threading.Thread):
         :returns: Read value.
         :raises: ValueError
         """
-        self.model.check_valid_pio(number)
+        self.model.check_pio(number)
 
         return self.send_command(mkcmd(3, 'B', number), 'BB')[1]
 
@@ -426,7 +369,7 @@ class DAQ(threading.Thread):
         :param output: PIO direction (0 input, 1 output).
         :raises: ValueError
         """
-        self.model.check_valid_pio(number)
+        self.model.check_pio(number)
 
         if output not in [0, 1]:
             raise ValueError("PIO direction out of range")
@@ -440,7 +383,7 @@ class DAQ(threading.Thread):
         :param value: Port output byte (bits: 0:low, 1:high).
         :raises: ValueError
         """
-        self.model.check_valid_port(value)
+        self.model.check_port(value)
         self.send_command(mkcmd(7, 'B', value), 'B')[0]
 
     def read_port(self):
@@ -457,7 +400,7 @@ class DAQ(threading.Thread):
         :param output: Port directions byte (bits: 0:input, 1:output).
         :raises: ValueError
         """
-        self.model.check_valid_port(output)
+        self.model.check_port(output)
         self.send_command(mkcmd(9, 'B', output), 'B')
 
     def spi_config(self, cpol, cpha):
@@ -656,7 +599,7 @@ class DAQ(threading.Thread):
         if not type(mode) is ExpMode:
             raise ValueError("Invalid mode")
 
-        self.model.check_valid_adc_settings(pinput, ninput, int(gain))
+        self.model.check_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
@@ -878,6 +821,8 @@ class DAQ(threading.Thread):
             - 1 if data stream was processed.
             - 2 if no data stream received.
         """
+        #TODO: refactor this method
+
         self.header = []
         self.data = []
         ret = self.ser.read(1)

@@ -1,4 +1,5 @@
 import unittest
+from opendaq import LedColor
 from opendaq.common import mkcmd
 from opendaq.simulator import DAQSimulator
 
@@ -25,8 +26,8 @@ class TestSimulator(unittest.TestCase):
         self.cmd_fail(220, 'B', 1)
 
     def test_set_led(self):
-        self.cmd_echo(18, 'B', 1)
-        assert self.daq.led_color == 1
+        self.cmd_echo(18, 'B', LedColor.RED)
+        assert self.daq.led_color == LedColor.RED
 
     def test_set_led_error(self):
         # invalid color

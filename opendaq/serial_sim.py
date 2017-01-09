@@ -20,7 +20,7 @@
 
 import struct
 from functools import wraps
-from opendaq.common import check_crc, LengthError, mkcmd
+from .common import check_crc, LengthError, mkcmd
 
 
 class SerialSim(object):
