@@ -22,6 +22,7 @@
 from __future__ import division
 from collections import namedtuple
 from enum import IntEnum
+import time
 
 
 CalibReg = namedtuple('CalibReg', ['gain', 'offset'])
@@ -85,15 +86,17 @@ class DAQModel(object):
         :param read_slot: Callback function that returns the raw
             calibration values (gain and offset) of a slot, given its index.
         """
+
         time.sleep(.05)
         for i in range(len(self.dac_calib)):
-            gain, offset = read_slot(i)
+            s, gain, offset = read_slot(i)
             self.dac_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**16)
 
         time.sleep(.05)
         for i in range(len(self.adc_calib)):
-            gain, offset = read_slot(i + len(self.dac_calib))
+            s, gain, offset = read_slot(i + len(self.dac_calib))
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
+
 
     def check_pio(self, number):
         if not (1 <= number <= self.npios):

@@ -41,7 +41,7 @@ class LedColor(IntEnum):
     OFF = 0
     GREEN = 1
     RED = 2
-    YELLOW = 3
+    ORANGE = 3
 
 
 class DAQ(threading.Thread):
