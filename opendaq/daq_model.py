@@ -26,7 +26,7 @@ import time
 
 
 CalibReg = namedtuple('CalibReg', ['gain', 'offset'])
-DAC = namedtuple('ADC', ['bits', 'vmin', 'vmax'])
+DAC = namedtuple('DAC', ['bits', 'vmin', 'vmax'])
 ADC = namedtuple('ADC', ['bits', 'vmin', 'vmax', 'pga_gains',
                          'pinputs', 'ninputs'])
 
@@ -88,14 +88,41 @@ class DAQModel(object):
         """
 
         time.sleep(.05)
+        # print "DAC slots read:"
         for i in range(len(self.dac_calib)):
             s, gain, offset = read_slot(i)
+            # print i, "<<", gain, offset
             self.dac_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**16)
 
         time.sleep(.05)
+        # print "ADC slots read:"
         for i in range(len(self.adc_calib)):
             s, gain, offset = read_slot(i + len(self.dac_calib))
+            # print i, "<<", gain, offset            
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
+
+    def save_calibration(self, write_slot, flag):
+        """Save calibration values in device EEPROM.
+        :param write_slot: Callback function that executes the writing of the 
+            calibration values (gain and offset) in a slot, given its index.
+        """
+        if flag != 'ADC':
+            time.sleep(.05)
+            # print "DAC slots write:"
+            for i in range(len(self.dac_calib)):
+                valuem = int(round((self.dac_calib[i].gain - 1) * (2.**16)))
+                valueb = int(round(self.dac_calib[i].offset * (2.**16)))
+                # print i, ">>", valuem, valueb
+                write_slot(i, valuem, valueb)
+
+        if flag != 'DAC':
+            time.sleep(.05)
+            # print "ADC slots write:"
+            for i in range(len(self.adc_calib)):
+                valuem = int(round((self.adc_calib[i].gain - 1) * (2.**16)))
+                valueb = int(round(self.adc_calib[i].offset * (2.**5)))
+                # print i, ">>", valuem, valueb
+                write_slot(i + len(self.dac_calib), valuem, valueb)
 
 
     def check_pio(self, number):

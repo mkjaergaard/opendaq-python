@@ -26,16 +26,13 @@ def reset_calibration():
     print "\n------------------------------\n"
     print "Resetting calibrations..."
 
-    dac_corr = [1.0] * dq.model.dac_slots
-    dac_offset = [0] * dq.model.dac_slots
-    adc_corrs = [1.0] * dq.model.adc_slots
-    adc_offsets = [0] * dq.model.adc_slots
+    for i in range(len(dq.model.dac_calib)):
+        dq.model.dac_calib[i].gain = 1.0
+        dq.model.dac_calib[i].offset = 0
 
-    dq.set_dac_cal(dac_corr, dac_offset)
-    dq.set_adc_cal(adc_corrs, adc_offsets, 'ALL')
-    time.sleep(.3)
-    dq.get_adc_cal()
-
+    for i in range(len(dq.model.adc_calib)):
+        dq.model.adc_calib[i].gain = 1.0
+        dq.model.adc_calib[i].offset = 0
 
 def load_dac_from_file():
     print "\n------------------------------\n"
@@ -353,8 +350,7 @@ if args.serial:
     time.sleep(.05)
 
 print "## OPENDAQ " + dq.hw_ver + " UTILS ##\n"
-dq.device_info()
-
+print dq 
 
 if args.report:
     outputname = './REPORT_' + dq.model.serial_str + '_' + time.strftime('%y%m%d') + '.txt'

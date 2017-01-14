@@ -29,7 +29,7 @@ from .common import check_crc, check_stream_crc, mkcmd
 from .common import LengthError, CRCError
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
-from .models import DAQModel
+from .models import DAQModel, Gains
 
 BAUDS = 115200
 NAK = mkcmd(160, '')
@@ -135,11 +135,26 @@ class DAQ(threading.Thread):
 
         :param slot: Calibration slot number.
         :returns:
+            - Slot number
             - Gain raw correction
             - Offset raw correction
         :raises: ValueError
         """
         return self.send_command(mkcmd(36, 'B', slot), 'Bhh')
+
+    def __write_calib_slot(self, slot, corr, offset):
+        """Write device calibration for a given slot.
+
+        :param slot: Calibration slot number.
+        :param corr: Gain raw correction
+        :param offset: Offset raw correction
+        :returns:
+            - Slot number
+            - Gain raw correction
+            - Offset raw correction
+        :raises: ValueError
+        """
+        return self.send_command(mkcmd(37, 'Bhh', slot, corr, offset), 'Bhh')
 
     def get_dac_cal(self):
         """Read DAC calibration.
@@ -155,6 +170,20 @@ class DAQ(threading.Thread):
         :returns: List of ADC calibration registers
         """
         return self.model.adc_calib
+    
+    def load_calibration(self):
+        """Recall calibration values from device's memory.
+
+        :returns: Nothing
+        """
+        self.model.load_calibration(self.__read_calib_slot)
+
+    def save_calibration(self, flag='ALL'):
+        """Recall calibration values from device's memory.
+        :param flag: Save 'ALL', 'DAC' or 'ADC' registers
+        :returns: Nothing
+        """
+        self.model.save_calibration(self.__write_calib_slot, flag)
 
     '''
     def __set_calibration(self, slot_id, corr, offset):
@@ -308,12 +337,12 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        self.model.check_valid_adc_settings(pinput, ninput, int(gain))
+        self.model.check_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
-
-        self.__gain = gain
+        
+        self.__gain = int(gain)
         self.__pinput = pinput
         self.__ninput = ninput
 
