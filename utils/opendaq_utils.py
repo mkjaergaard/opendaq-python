@@ -34,11 +34,12 @@ def reset_calibration():
         dq.model.adc_calib[i].gain = 1.0
         dq.model.adc_calib[i].offset = 0
 
+    dq.save_calibration()
+
+
 def load_dac_from_file():
     print "\n------------------------------\n"
     print "Load DAC calibration from file:"
-
-    dac_corr, dac_offset = dq.get_dac_cal()
 
     x = []
     y = []
@@ -52,11 +53,10 @@ def load_dac_from_file():
 
     new_corr, new_offset = np.polyfit(x, y, 1)
 
-    dac_corr[0] *= new_corr
-    dac_offset[0] += new_offset
+    dq.model.dac_calib[0].gain *= new_corr
+    dq.model.dac_calib[0].offset += new_offset
 
-    dq.set_dac_cal(dac_corr, dac_offset)
-    dq.get_dac_cal()
+    dq.save_calibration('DAC')
 
     file_log("\r\nLoad values from file:\nx=")
     for i in range(len(x)):
@@ -65,11 +65,11 @@ def load_dac_from_file():
     for i in range(len(y)):
         file_log("%1.4f " % y[i])
 
-    print "DAC:\nm=%1.3f\n" % new_corr
-    print "b=%1.3f\r\n" % new_offset
+    print "DAC:\nm=%1.3f\n" % dq.model.dac_calib[0].gain
+    print "b=%1.3f\r\n" % dq.model.dac_calib[0].offset
 
-    file_log("DAC:\nm=%1.3f\n" % new_corr)
-    file_log("b=%1.3f\r\n" % new_offset)
+    file_log("DAC:\nm=%1.3f\n" % dq.model.dac_calib[0].gain)
+    file_log("b=%1.3f\r\n" % dq.model.dac_calib[0].offset)
 
 
 def calculate_adc_offsets():
@@ -79,67 +79,81 @@ def calculate_adc_offsets():
     dq.set_analog(0)
     print "0 Volts -->\n"
 
-    offsets_chp = []
     offsets_ampli = []
-
-    for canal in dq.model.pinput_range:
+    for canal in dq.model.adc.pinputs:
         print "\nAIN", canal, ":"
         a = []
         b = []
         c = []
-        for i in dq.model.adc_gain_range():
-            gain = i
-            dq.conf_adc(canal, 0, gain)
+        for i in range(len(dq.model.adc.pga_gains)):
+            dq.conf_adc(canal, 0, i)
             dq.read_adc()
             time.sleep(0.05)
-            a.append(dq.model.adc_base_ampli[i])
+            a.append(dq.model.adc.pga_gains[i])
             b.append(dq.read_adc())
             c.append(dq.read_analog())
             print "x%0.2f" % a[i], b[i], "%0.4f" % c[i]
-        print a, b
         new_corr, new_offset = np.polyfit(a, b, 1)
         print "\r\n%0.2f" % new_corr, "%0.2f" % new_offset
-        offsets_chp.append(new_offset)
-        offsets_ampli.append(new_corr)
+        dq.model.adc_calib[canal - 1] = dq.model.adc_calib[canal - 1]._replace(offset=new_offset)
+        if dq.hw_ver == "[N]":
+            index = len(dq.model.adc.pinputs) + canal - 1
+            dq.model.adc_calib[index] = dq.model.adc_calib[index]._replace(offset=new_corr)
+        offsets_ampli.append(new_offset)
 
-    adc_offsets = offsets_ampli + offsets_chp
-    adc_corrs = [1.0] * dq.model.adc_slots
+    if dq.hw_ver == "[M]":
+        off_ampli = np.mean(offsets_ampli)
+        for gain_range in range(len(dq.model.adc.pga_gains)):
+            index = len(dq.model.adc.pinputs) + gain_range - 1
+            dq.model.adc_calib[index] = dq.model.adc_calib[index]._replace(offset=off_ampli)
 
-    print "\n", adc_offsets
-
-    dq.set_adc_cal(adc_corrs, adc_offsets)
-
-    adc_corrs, adc_offsets = dq.get_adc_cal()
-    print "b= ", adc_offsets, "\n"
+    dq.save_calibration('ADC')
 
 
 def calculate_adc_gains():
     print "\n------------------------------\n"
     print "ADC CALIBRATION - Gain calculation:\n"
 
-    adc_corrs, adc_offsets = dq.get_adc_cal()
-
     dq.set_analog(1)
-    for i in dq.model.pinput_range:
+    for i in dq.model.adc.pinputs:
         dq.conf_adc(i, 0, 0)
         dq.read_adc()
         time.sleep(0.05)
         value = dq.read_analog()
-        adc_corrs[i - 1] = value
+        dq.model.adc_calib[i - 1] = dq.model.adc_calib[i - 1]._replace(gain=value)
         print i, "-->", "%0.4f" % value
 
-    dq.set_adc_cal(adc_corrs, adc_offsets)
-    adc_corrs, adc_offsets = dq.get_adc_cal()
+    for ampli in range(len(dq.model.adc.pga_gains)):
+        volts = 1./dq.model.adc.pga_gains[ampli]
+        dq.set_analog(volts)
+        a = []
+        for ch in dq.model.adc.pinputs:
+            dq.conf_adc(ch, 0, ampli)
+            dq.read_adc()
+            time.sleep(0.05)
+            value = dq.read_analog()
+            a.append(value/volts)
+        index = len(dq.model.adc.pinputs) + ampli - 1
+        dq.model.adc_calib[index] = dq.model.adc_calib[index]._replace(gain=np.mean(a))
 
-    print "ADC calibration:\nm= ", adc_corrs, "\n"
-    print "b= ", adc_offsets, "\n"
+    dq.save_calibration('ADC')
+
+
+    corrs = [1]*dq.model.adc_slots
+    offsets = [1]*dq.model.adc_slots
+
+    for i in range(dq.model.adc_slots):
+        corrs[i], offsets[i] = dq.model.adc_calib[i]
+
+    print "ADC calibration:\nm= ", corrs, "\n"
+    print "b= ", offsets, "\n"
 
     file_log("\r\n\nADC calibration:\nm= [")
-    for i in range(dq.model.adc_slots):
-        file_log("%1.4f " % adc_corrs[i])
+    for i in range(len(dq.model.adc_slots)):
+        file_log("%1.4f " % dq.model.adc_calib[i].gain)
     file_log("]\nb= [")
-    for i in range(dq.model.adc_slots):
-        file_log("%1.1f " % adc_offsets[i])
+    for i in range(len(dq.model.adc_slots)):
+        file_log("%1.1f " % dq.model.adc_calib[i].offset)
     file_log("]\r\n")
 
 
@@ -148,16 +162,11 @@ def calculate_se_calibration():
     print "ADC CALIBRATION - SE mode:\n"
     volts = [1, 2, 3, 4]
 
-    adc_corrs = [1.0] * len(dq.model.pinput_range)
-    adc_offsets = [0] * len(dq.model.pinput_range)
-
-    for i in dq.model.pinput_range:
+    for i in dq.model.adc.pinputs:
         print "\nAIN", i, ":"
         dq.conf_adc(i, 0)
         a = []
         b = []
-        dq.set_analog(0)
-        dq.read_adc()
         for j in volts:
             dq.set_analog(j)
             dq.read_adc()
@@ -168,13 +177,12 @@ def calculate_se_calibration():
             print j, "V-->", raw, " == ", value
         new_corr, new_offset = np.polyfit(volts, b, 1)
         print "m:", new_corr
-        adc_corrs[i - 1] = new_corr
+        dq.model.adc_calib[i - 1] = dq.model.adc_calib[i - 1]._replace(gain=new_corr)
         new_corr, new_offset = np.polyfit(volts, a, 1)
         print "b:", new_offset
-        adc_offsets[i - 1] = new_offset
+        dq.model.adc_calib[i - 1] = dq.model.adc_calib[i - 1]._replace(offset=new_offset)
 
-    dq.set_adc_cal(adc_corrs, adc_offsets, 'SE')
-    print "\nNew ADC coefficients (SE): \n", dq.get_adc_cal()
+    dq.save_calibration('ADC')
 
     file_log("ADC /SE mode:\nm= [")
     for i in dq.model.pinput_range:
@@ -189,11 +197,6 @@ def calculate_de_calibration():
     print "\n------------------------------\n"
     print "ADC CALIBRATION - DE mode:\n"
 
-    adc_corrs = [1.0] * len(dq.model.pinput_range)
-    adc_offsets = [0] * len(dq.model.pinput_range)
-
-    mycal, myoff = dq.get_adc_cal()
-
     pinputs = [1, 2, 3, 4, 5, 6, 7, 8]
     ninputs = [2, 1, 4, 3, 6, 5, 8, 7]
 
@@ -204,11 +207,10 @@ def calculate_de_calibration():
         print "\nAIN", pinputs[i], ninputs[i], ":"
         dq.read_adc()
         raw = dq.read_adc()
-        adc_offsets[i] = raw
-        adc_corrs[i] = mycal[i]
-        print "b:", raw
+        index = len(self.adc.pinputs) + i - 1
+        dq.model.adc_calib[index] = dq.model.adc_calib[index]._replace(offset=raw)
 
-    dq.set_adc_cal(adc_corrs, adc_offsets, 'DE')
+    dq.save_calibration('ADC')
     print "\nNew ADC coefficients (DE): \n", dq.get_adc_cal()
 
     file_log("ADC /DE mode:\nm= [")
@@ -249,7 +251,7 @@ def exec_adc_test():
     file_log("\r\n\nADC CALIBRATION TEST:\n")
 
     if dq.hw_ver == "[S]":
-        for i in dq.model.pinput_range:
+        for i in dq.model.adc.pinputs:
             dq.conf_adc(i, 0)
             print "\n", i
             file_log("\nA%d:\n" % i)
@@ -262,16 +264,16 @@ def exec_adc_test():
                 file_log("%1.3f V read ## Error:" % value)
                 file_log("%0.2f%%\n" % (abs(100 * (value - j) / 12.)))
     elif dq.hw_ver == "[N]":
-        for ampli in dq.model.adc_gain_range():
+        for ampli in range(len(dq.model.adc.pga_gains)):
             print "\nGain range:", ampli, "-> x", "%0.3f" % dq.model.adc_base_ampli[ampli], "\n"
-            file_log("\nGain range: x%0.2f\n" % dq.model.adc_base_ampli[ampli])
-            volts = 2. / dq.model.adc_base_ampli[ampli]
-            max_reference = 12. / dq.model.adc_base_ampli[ampli]
+            file_log("\nGain range: x%0.2f\n" % dq.model.adc.pga_gains[ampli])
+            volts = 2. / dq.model.adc.pga_gains[ampli]
+            max_reference = 12. / dq.model.adc.pga_gains[ampli]
             # volts = 0
             print "%0.2f" % volts, "Volts -->\n"
             file_log("V set =  %1.3f\n" % volts)
             dq.set_analog(volts)
-            for i in dq.model.pinput_range:
+            for i in dq.model.adc.pinputs:
                 dq.conf_adc(i, 0, ampli)
                 dq.read_adc()
                 time.sleep(0.05)
@@ -282,11 +284,11 @@ def exec_adc_test():
                 file_log("%0.2f%%\n" % (abs(100 * (value - volts) / max_reference)))
             file_log("\n")
     else:
-        for ampli in dq.model.adc_gain_range():
-            print "\nGain range:",ampli, "-> x", "%0.2f" % dq.model.adc_base_ampli[ampli], "\n"
-            file_log("\nGain range: x%0.2f\n" % dq.model.adc_base_ampli[ampli])
-            volts = 1. / dq.model.adc_base_ampli[ampli]
-            max_reference = min(12., 12. / dq.model.adc_base_ampli[ampli])
+        for ampli in range(len(dq.model.adc.pga_gains)):
+            print "\nGain range:",ampli, "-> x", "%0.2f" % dq.model.adc.pga_gains[ampli], "\n"
+            file_log("\nGain range: x%0.2f\n" % dq.model.adc.pga_gains[ampli])
+            volts = 1. / dq.model.adc.pga_gains[ampli]
+            max_reference = min(12., 12. / dq.model.adc.pga_gains[ampli])
             print "%0.2f" % volts, "Volts -->\n"
             dq.set_analog(volts)
             for i in dq.model.pinput_range:

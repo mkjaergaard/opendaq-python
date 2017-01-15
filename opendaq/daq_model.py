@@ -63,6 +63,8 @@ class DAQModel(object):
         self.nleds = nleds
         self.dac = dac
         self.adc = adc
+        self.dac_slots = dac_slots
+        self.adc_slots = adc_slots
 
         # Create the calibration slots
         self.adc_calib = [CalibReg(1., 0.)]*adc_slots
@@ -98,12 +100,12 @@ class DAQModel(object):
         # print "ADC slots read:"
         for i in range(len(self.adc_calib)):
             s, gain, offset = read_slot(i + len(self.dac_calib))
-            # print i, "<<", gain, offset            
+            # print i, "<<", gain, offset
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
 
     def save_calibration(self, write_slot, flag):
         """Save calibration values in device EEPROM.
-        :param write_slot: Callback function that executes the writing of the 
+        :param write_slot: Callback function that executes the writing of the
             calibration values (gain and offset) in a slot, given its index.
         """
         if flag != 'ADC':
@@ -124,7 +126,6 @@ class DAQModel(object):
                 # print i, ">>", valuem, valueb
                 write_slot(i + len(self.dac_calib), valuem, valueb)
 
-
     def check_pio(self, number):
         if not (1 <= number <= self.npios):
             raise ValueError("PIO number out of range")
@@ -138,7 +139,7 @@ class DAQModel(object):
             raise ValueError("Invalid positive input selection")
         if ninput not in self.adc.ninputs:
             raise ValueError("Invalid negative input selection")
-        if not gain in range(len(self.adc.pga_gains)):
+        if gain not in range(len(self.adc.pga_gains)):
             raise ValueError("Invalid gain selection")
 
     def _get_adc_slots(self, gain_id, pinput, ninput):
@@ -199,7 +200,7 @@ class DAQModel(object):
         raw = int(round((volts-offset)/(gain*base_gain)))
 
         # clamp value between DAC limits
-        return max(-1<<(self.dac.bits-1), min(raw, (1<<(self.dac.bits-1))-1))
+        return max(-1<<(self.dac.bits - 1), min(raw, (1<<(self.dac.bits - 1)) - 1))
 
     @classmethod
     def new(cls, model_id, fw_ver, serial):

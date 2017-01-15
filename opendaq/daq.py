@@ -170,7 +170,7 @@ class DAQ(threading.Thread):
         :returns: List of ADC calibration registers
         """
         return self.model.adc_calib
-    
+
     def load_calibration(self):
         """Recall calibration values from device's memory.
 
@@ -294,7 +294,7 @@ class DAQ(threading.Thread):
         :param volts: DAC output value in volts.
         :raises: ValueError
         """
-        self.set_dac(self.model.volts_to_raw(volts, number-1), number)
+        self.set_dac(self.model.volts_to_raw(volts, number - 1), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value.
@@ -341,7 +341,7 @@ class DAQ(threading.Thread):
 
         if not 0 <= nsamples < 255:
             raise ValueError("samples number out of range")
-        
+
         self.__gain = int(gain)
         self.__pinput = pinput
         self.__ninput = ninput
