@@ -23,18 +23,13 @@ from __future__ import division
 import time
 from collections import namedtuple
 from enum import IntEnum
+import time
 
 
-DAC = namedtuple('ADC', ['bits', 'vmin', 'vmax'])
+CalibReg = namedtuple('CalibReg', ['gain', 'offset'])
+DAC = namedtuple('DAC', ['bits', 'vmin', 'vmax'])
 ADC = namedtuple('ADC', ['bits', 'vmin', 'vmax', 'pga_gains',
                          'pinputs', 'ninputs'])
-
-
-class CalibReg(namedtuple('CalibReg', ['gain', 'offset'])):
-    __slots__ = ()
-
-    def __str__(self):
-        return "gain: %.4f\toffset: %.2f" % (self.gain, self.offset)
 
 
 class PGAGains(IntEnum):
@@ -69,6 +64,8 @@ class DAQModel(object):
         self.nleds = nleds
         self.dac = dac
         self.adc = adc
+        self.dac_slots = dac_slots
+        self.adc_slots = adc_slots
 
         # Create the calibration slots
         self.adc_calib = [CalibReg(1., 0.)]*adc_slots
@@ -86,15 +83,20 @@ class DAQModel(object):
         :param read_slot: Callback function that returns the raw
             calibration values (gain and offset) of a slot, given its index.
         """
+
         time.sleep(.05)
+        # print "DAC slots read:"
         for i in range(len(self.dac_calib)):
             gain, offset = read_slot(i)
+            # print i, "<<", gain, offset
             self.dac_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**16)
 
     def load_adc_calib(self, read_slot):
         time.sleep(.05)
+        # print "ADC slots read:"
         for i in range(len(self.adc_calib)):
             gain, offset = read_slot(i + len(self.dac_calib))
+            # print i, "<<", gain, offset
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
 
     def write_dac_calib(self, regs, write_slot):
@@ -112,7 +114,7 @@ class DAQModel(object):
                 raise ValueError("Registers must be instances of CalibReg")
 
             write_slot(i, (reg.gain - 1.)*2**16, reg.offset*2**16)
-            self.daq_calib[i] = reg
+            self.dac_calib[i] = reg
 
     def write_adc_calib(self, regs, write_slot):
         if len(regs) != len(self.adc_calib):
@@ -140,7 +142,7 @@ class DAQModel(object):
             raise ValueError("Invalid positive input selection")
         if ninput not in self.adc.ninputs:
             raise ValueError("Invalid negative input selection")
-        if not gain in range(len(self.adc.pga_gains)):
+        if gain not in range(len(self.adc.pga_gains)):
             raise ValueError("Invalid gain selection")
 
     def _get_adc_slots(self, gain_id, pinput, ninput):
@@ -201,7 +203,7 @@ class DAQModel(object):
         raw = int(round((volts-offset)/(gain*base_gain)))
 
         # clamp value between DAC limits
-        return max(-1<<(self.dac.bits-1), min(raw, (1<<(self.dac.bits-1))-1))
+        return max(-1<<(self.dac.bits - 1), min(raw, (1<<(self.dac.bits - 1)) - 1))
 
     @classmethod
     def new(cls, model_id, fw_ver, serial):

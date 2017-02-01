@@ -3,6 +3,7 @@
 
 import os
 import sys
+from setuptools import setup
 
 DESCRIPTION = 'Python binding for openDAQ hardware'
 LONG_DESCRIPTION = """
@@ -12,13 +13,8 @@ such as analog inputs and outputs, digital inputs and outputs, \
 timers and counters.
 """
 
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
 
-
-requires = ['pyserial']
+requires = ['pyserial', 'numpy', 'terminaltables']
 if sys.version_info[0] == 2:
     requires.append('enum34')
 
@@ -39,6 +35,9 @@ setup(
     zip_safe=False,
     test_suite='tests',
     platforms=['any'],
+    entry_points={
+        'console_scripts': ['opendaq-utils = opendaq.utils:main']
+    },
     classifiers=[
         'Development Status :: 4 - Beta',
         'Intended Audience :: Developers',

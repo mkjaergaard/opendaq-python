@@ -1,4 +1,5 @@
 pyserial
+terminaltables
 pytest
 flake8
 tox

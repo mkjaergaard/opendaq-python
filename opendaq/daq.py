@@ -29,7 +29,7 @@ from .common import check_crc, check_stream_crc, mkcmd
 from .common import LengthError, CRCError
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
-from .models import DAQModel
+from .models import DAQModel, Gains
 
 BAUDS = 115200
 NAK = mkcmd(160, '')
@@ -41,7 +41,7 @@ class LedColor(IntEnum):
     OFF = 0
     GREEN = 1
     RED = 2
-    YELLOW = 3
+    ORANGE = 3
 
 
 class DAQ(threading.Thread):
@@ -136,8 +136,8 @@ class DAQ(threading.Thread):
 
         :param slot_id: Number of the calibration slot.
         :returns:
-            - Gain raw correction (signed 16-bit integer)
-            - Offset raw correction (signed 16-bit integer)
+            - Gain raw correction
+            - Offset raw correction
         :raises: ValueError
         """
         return self.send_command(mkcmd(36, 'B', slot), 'Bhh')[1:]
@@ -148,6 +148,10 @@ class DAQ(threading.Thread):
         :param slot_id: Number of the calibration slot.
         :param gain: Gain raw correction (signed 16-bit integer).
         :param offset: Offset raw correction (signed 16-bit integer).
+        :returns:
+            - Slot number
+            - Gain raw correction
+            - Offset raw correction
         :raises: ValueError
         """
         return self.send_command(mkcmd(37, 'Bhh', slot_id,
@@ -193,6 +197,10 @@ class DAQ(threading.Thread):
             raise ValueError("id out of range")
 
         return self.send_command(mkcmd(39, 'I', id), 'BBI')
+
+    @property
+    def serial_str(self):
+        return self.__model.serial_str
 
     def get_info(self):
         """Read device information.
@@ -291,12 +299,12 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
 
-        self.__model.check_adc_settings(pinput, ninput, gain)
+        self.__model.check_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
 
-        self.__gain = gain
+        self.__gain = int(gain)
         self.__pinput = pinput
         self.__ninput = ninput
 
