@@ -168,6 +168,7 @@ class DAQModel(object):
         """
         # obtain the calibration gains and offsets
         slot1, slot2 = self._get_adc_slots(gain_id, pinput, ninput)
+        print "slots:", slot1, slot2
         gain1, offs1 = (1., 0.) if slot1 < 0 else self.adc_calib[slot1]
         gain2, offs2 = (1., 0.) if slot2 < 0 else self.adc_calib[slot2]
 
@@ -199,7 +200,7 @@ class DAQModel(object):
         except IndexError:
             raise IndexError('Invalid DAC number')
 
-        base_gain = self.dac.vmax/2**(self.dac.bits-1)
+        base_gain = self.dac.vmax/2**(self.dac.bits - 1)
         raw = int(round((volts-offset)/(gain*base_gain)))
 
         # clamp value between DAC limits

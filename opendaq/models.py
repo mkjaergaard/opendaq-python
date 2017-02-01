@@ -108,7 +108,7 @@ class ModelN(DAQModel):
         return pinput - 1, len(self.adc.pinputs) + pinput - 1
 
 
-class ModelTP08(DAQModel):
+class ModelTP08ABRR(DAQModel):
     _id = 10
 
     def __init__(self, fw_ver, serial):
@@ -126,18 +126,35 @@ class ModelTP08(DAQModel):
         return pinput - 1, len(self.adc.pinputs) + pinput - 1
 
 
-class ModelTP04(DAQModel):
+class ModelTP04AR(DAQModel):
     _id = 11
 
     def __init__(self, fw_ver, serial):
         DAQModel.__init__(
             self, fw_ver, serial,
-            model_str='TP04', serial_fmt='TP04x10%04d',
-            adc_slots=4, dac_slots=2, npios=2, nleds=4,
+            model_str='TP04AR', serial_fmt='TP04x11%04d',
+            adc_slots=4, dac_slots=2, npios=2, nleds=2,
             dac=DAC(bits=16, vmin=-1.25, vmax=1.25),
             adc=ADC(bits=16, vmin=-24.0, vmax=24.0,
                     pga_gains=Gains.TP04.values,
                     pinputs=[1, 2], ninputs=[0])
+        )
+
+    def _get_adc_slots(self, gain_id, pinput, ninput):
+        return pinput - 1, len(self.adc.pinputs) + pinput - 1
+
+class ModelTP04AB(DAQModel):
+    _id = 12
+
+    def __init__(self, fw_ver, serial):
+        DAQModel.__init__(
+            self, fw_ver, serial,
+            model_str='TP04AB', serial_fmt='TP04x12%04d',
+            adc_slots=8, dac_slots=2, npios=0, nleds=4,
+            dac=DAC(bits=16, vmin=-1.25, vmax=1.25),
+            adc=ADC(bits=16, vmin=-24.0, vmax=24.0,
+                    pga_gains=Gains.TP04.values,
+                    pinputs=[1, 2, 3, 4], ninputs=[0])
         )
 
     def _get_adc_slots(self, gain_id, pinput, ninput):
