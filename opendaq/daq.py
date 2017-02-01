@@ -29,7 +29,7 @@ from .common import check_crc, check_stream_crc, mkcmd
 from .common import LengthError, CRCError
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
-from .models import DAQModel, Gains
+from .models import DAQModel
 
 BAUDS = 115200
 NAK = mkcmd(160, '')
@@ -162,14 +162,14 @@ class DAQ(threading.Thread):
 
         :returns: List of DAC calibration registers
         """
-        return list(self.__model.dac_calib) # return a copy of the list
+        return list(self.__model.dac_calib)  # return a copy of the list
 
     def get_adc_calib(self):
         """Get the ADC calibration.
 
         :returns: List of ADC calibration registers
         """
-        return list(self.__model.adc_calib) # return a copy of the list
+        return list(self.__model.adc_calib)  # return a copy of the list
 
     def set_dac_calib(self, regs):
         """Set the DAC calibration.
@@ -812,7 +812,7 @@ class DAQ(threading.Thread):
             - 1 if data stream was processed.
             - 2 if no data stream received.
         """
-        #TODO: refactor this method
+        # TODO: refactor this method
 
         self.header = []
         self.data = []

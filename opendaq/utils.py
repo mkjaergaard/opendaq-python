@@ -1,13 +1,12 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
-import logging
-import argparse
-import sys
 import os
 import time
+import logging
+import argparse
 import numpy as np
-from terminaltables import SingleTable
+from terminaltables import AsciiTable
 import usbtmc
 from .daq import DAQ
 from .daq_model import CalibReg, DAQModel
@@ -15,14 +14,14 @@ from .daq_model import CalibReg, DAQModel
 log_formatter = logging.Formatter("%(message)s")
 
 
-class ExpectedValuesTable(SingleTable):
-    '''A custom SingleTable for printing calibration results'''
+class ExpectedValuesTable(AsciiTable):
+    '''A custom AsciiTable for printing calibration results'''
     def __init__(self, values):
         rows = [['Target', 'Read']]
         for x, y in values:
             rows.append(['%.1f V' % x, '%.4f V' % y])
 
-        SingleTable.__init__(self, rows)
+        AsciiTable.__init__(self, rows)
 
     def __str__(self):
         return self.table
@@ -91,7 +90,7 @@ class CalibDAQ(DAQ):
         rows = [['Gain', 'Offset']]
         for c in calib:
             rows.append(['%.4f' % c.gain, '%.4f' % c.offset])
-        logging.info(SingleTable(rows).table)
+        logging.info(AsciiTable(rows).table)
 
     def calibrate_adc_offset(self):
         logging.info(title("Calibrating ADC offset"))
@@ -158,7 +157,7 @@ class CalibDAQ(DAQ):
 
         logging.info("ADC calibration:")
         self.print_calib(calib)
-        #self.set_adc_calib(calib)
+        self.set_adc_calib(calib)
 
     def calibrate_se(self):
         logging.info("Calibrating ADC (Single-ended mode)")
@@ -168,15 +167,14 @@ class CalibDAQ(DAQ):
 
         for ch in self.pinputs:
             logging.info("AIN %d:" % ch)
-            daq.conf_adc(ch, 0)
+            self.conf_adc(ch, 0)
             a = []
             b = []
             for v in volts:
-                daq.set_analog(v)
-                val = daq.read_analog()
-                a.append(raw)
+                self.set_analog(v)
+                val = self.read_analog()
                 b.append(val)
-                logging.info("%.1f\tV-->%d == %.4f" % (v, raw, val))
+                logging.info("%.1f\tV--> == %.4f" % (v, val))
 
             new_corr, _ = np.polyfit(volts, b, 1)
             _, new_offset = np.polyfit(volts, a, 1)
@@ -185,7 +183,7 @@ class CalibDAQ(DAQ):
 
         logging.info("ADC calibration (single-ended mode):")
         self.print_calib(calib)
-        daq.set_adc_calib(calib)
+        self.set_adc_calib(calib)
 
     def calibrate_de(self):
         logging.info("Calibrating ADC (Double-ended mode)")
@@ -258,8 +256,9 @@ class CalibDAQ(DAQ):
                     self.set_analog(volts)
                     val = self.read_analog()
                     err = abs(100 * (val - volts) / 12.)
-                    rows.append(['%1.1f V' % volts, '%1.3f V' % val, '%0.2f %%' % err])
-                logging.info(SingleTable(rows).table)
+                    rows.append(['%1.1f V' % volts, '%1.3f V' % val,
+                                 '%0.2f %%' % err])
+                logging.info(AsciiTable(rows).table)
         else:
             for i, gain in enumerate(self.pga_gains):
                 if self.hw_ver == '[N]':
@@ -277,7 +276,7 @@ class CalibDAQ(DAQ):
                     val = self.read_analog()
                     err = abs(100 * (val - volts) / max_ref)
                     rows.append([pinput, '%1.3f V' % val, '%0.2f %%' % err])
-                logging.info(SingleTable(rows).table)
+                logging.info(AsciiTable(rows).table)
 
 
 def info_cmd(args):
@@ -380,12 +379,13 @@ def main():
 
     # 'calib' command parser
     cparser = subparsers.add_parser('calib', help='Calibrate the device')
-    cparser.add_argument( '-l', '--log', action='store_true',
+    cparser.add_argument('-l', '--log', action='store_true',
                          help='Generate log file'),
-    cparser.add_argument( '-r', '--reset', action='store_true',
+    cparser.add_argument('-r', '--reset', action='store_true',
                          help='Reset calibration')
     cparser.add_argument('-d', '--dac', default='calib.txt',
-                         help='Load DAQ calibration values from a file (default: calib.txt)')
+                         help='Load DAQ calibration values from a file '
+                         '(default: calib.txt)')
     cparser.add_argument('-s', '--show', action='store_true',
                          help='Show calibration values')
     cparser.add_argument('-a', '--auto', action='store_true',
@@ -402,7 +402,7 @@ def main():
 
     # 'set-voltage' command parser
     vparser = subparsers.add_parser('set-voltage', help='Set DAC voltage')
-    vparser.add_argument( '-i', '--interactive', action='store_true',
+    vparser.add_argument('-i', '--interactive', action='store_true',
                          help='Interactively ask for voltage values')
     vparser.add_argument('volts', type=float, help='Output voltage')
     vparser.set_defaults(func=set_voltage_cmd)

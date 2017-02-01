@@ -73,7 +73,8 @@ class SerialSim(object):
         return mkcmd(ncmd, fmt, *ret_values)
 
     def list_commands(self):
-        cmd_list = [(cmd, lst[1]) for cmd, lst in list(self.__commands.items())]
+        cmd_list = [(cmd, lst[1]) for cmd, lst in
+                    list(self.__commands.items())]
         return sorted(cmd_list, key=lambda cmd: cmd[1])
 
     def exec_command(self, data):

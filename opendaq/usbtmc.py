@@ -15,7 +15,9 @@ FUNCTIONS = {
 
 
 class usbtmc:
-    """Simple implementation of a USBTMC device driver, in the style of visa.h"""
+    """Simple implementation of a USBTMC device driver,
+    in the style of visa.h
+    """
 
     def __init__(self, device):
         self.device = device
@@ -24,9 +26,9 @@ class usbtmc:
         # TODO: Test that the file opened
 
     def write(self, command):
-        os.write(self.FILE, command);
+        os.write(self.FILE, command)
 
-    def read(self, length = 4000):
+    def read(self, length=4000):
         return os.read(self.FILE, length)
 
     def getName(self):
@@ -38,7 +40,8 @@ class usbtmc:
 
 
 class RigolDM3058:
-    """Class to control a Rigol DS1000 series oscilloscope"""
+    """Class for controlling a Rigol DS1000 series oscilloscope"""
+
     def __init__(self, device):
         self.__dev = usbtmc(device)
         self.name = self.__dev.getName()
@@ -59,7 +62,7 @@ class RigolDM3058:
         command = ':FUNCtion:' + FUNCTIONS[function]
         self.write(command)
 
-    def measure(self, function, range=2):
+    def measure(self, function):
         command = ':MEASure:%s?' % FUNCTIONS[function]
         self.write(command)
         return float(self.read(13))

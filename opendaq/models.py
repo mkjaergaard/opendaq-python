@@ -21,7 +21,6 @@
 
 from __future__ import division
 from .daq_model import DAQModel, ADC, DAC, PGAGains
-from collections import namedtuple
 
 
 class Gains:
@@ -142,6 +141,7 @@ class ModelTP04AR(DAQModel):
 
     def _get_adc_slots(self, gain_id, pinput, ninput):
         return pinput - 1, len(self.adc.pinputs) + pinput - 1
+
 
 class ModelTP04AB(DAQModel):
     _id = 12

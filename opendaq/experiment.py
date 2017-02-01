@@ -69,7 +69,7 @@ class DAQExperiment(object):
         if not type(mode) is Trigger:
             raise ValueError("Invalid trigger mode")
 
-        if 1 <= mode <= 6 and not value in [0, 1]:
+        if 1 <= mode <= 6 and value not in [0, 1]:
             raise ValueError("Invalid value of digital trigger")
 
         self.trg_mode = mode

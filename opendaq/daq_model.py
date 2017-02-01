@@ -23,7 +23,6 @@ from __future__ import division
 import time
 from collections import namedtuple
 from enum import IntEnum
-import time
 
 
 CalibReg = namedtuple('CalibReg', ['gain', 'offset'])
@@ -53,8 +52,8 @@ class DAQModel(object):
     def __init__(self, fw_ver, serial, model_str='', serial_fmt='%d',
                  adc=None, dac=None, adc_slots=0, dac_slots=0,
                  npios=0, nleds=0):
-        assert type(adc) is ADC, "adc argument must be an instance of ADC class"
-        assert type(dac) is DAC, "dac argument must be an instance of DAC class"
+        assert type(adc) is ADC, "adc argument must be an instance of ADC"
+        assert type(dac) is DAC, "dac argument must be an instance of DAC"
 
         self.fw_ver = fw_ver
         self.serial = serial
@@ -72,7 +71,7 @@ class DAQModel(object):
         self.dac_calib = [CalibReg(1., 0.)]*dac_slots
 
         if self.fw_ver < 130:
-            raise ValueError('Invalid firmware version. Please update the firmware!')
+            raise ValueError('Invalid firmware version. Please upgrade it!')
 
     @property
     def serial_str(self):
@@ -179,7 +178,6 @@ class DAQModel(object):
         offset = offs1*pga_gain + offs2
         return (raw - offset)/gain
 
-
     def __check_dac_value(self, volts):
         if not (self.dac.vmin <= volts <= self.dac.vmax):
             raise ValueError("DAC voltage out of range")
@@ -204,7 +202,8 @@ class DAQModel(object):
         raw = int(round((volts-offset)/(gain*base_gain)))
 
         # clamp value between DAC limits
-        return max(-1<<(self.dac.bits - 1), min(raw, (1<<(self.dac.bits - 1)) - 1))
+        return max(-1 << (self.dac.bits - 1),
+                   min(raw, (1 << (self.dac.bits - 1)) - 1))
 
     @classmethod
     def new(cls, model_id, fw_ver, serial):
