@@ -7,7 +7,7 @@ import logging
 import argparse
 import numpy as np
 from terminaltables import AsciiTable
-import usbtmc
+from . import usbtmc
 from .daq import DAQ
 from .daq_model import CalibReg, DAQModel
 
@@ -48,6 +48,7 @@ class CalibDAQ(DAQ):
         model = DAQModel.new(*self.get_info())
         self.pinputs = model.adc.pinputs
         self.pga_gains = model.adc.pga_gains
+        self.dac_range = (model.dac.vmin, model.dac.vmax)
 
     def read_analog(self):
         self.read_adc()
@@ -70,7 +71,8 @@ class CalibDAQ(DAQ):
 
     def calibrate_dac(self, dac_file=None, meter=None):
         if meter:
-            x, y = self.measure_dac([-3, -1, 0, 1, 3], meter)
+            volts = range(int(self.dac_range[0]), int(self.dac_range[1]) + 1)
+            x, y = self.measure_dac(volts, meter)
             logging.info("Values measured with the USB multimeter:")
         else:
             x, y = np.loadtxt(dac_file, unpack=True)
@@ -173,8 +175,10 @@ class CalibDAQ(DAQ):
             for v in volts:
                 self.set_analog(v)
                 val = self.read_analog()
+                raw = self.read_adc()
+                a.append(raw)
                 b.append(val)
-                logging.info("%.1f\tV--> == %.4f" % (v, val))
+                logging.info("%.1f\tV--> == %d %.4f" % (v, raw, val))
 
             new_corr, _ = np.polyfit(volts, b, 1)
             _, new_offset = np.polyfit(volts, a, 1)
@@ -186,7 +190,7 @@ class CalibDAQ(DAQ):
         self.set_adc_calib(calib)
 
     def calibrate_de(self):
-        logging.info("Calibrating ADC (Double-ended mode)")
+        logging.info("Calibrating ADC (Differential-ended mode)")
 
         calib = self.get_adc_calib()
         ninputs = [2, 1, 4, 3, 6, 5, 8, 7]
@@ -195,12 +199,10 @@ class CalibDAQ(DAQ):
 
         for i, ch in enumerate(self.pinputs):
             self.conf_adc(ch, ninputs[i])
-            logging.info("AIN %d %d:" % (ch, ninputs[i]))
             raw = self.read_adc()
-            idx = len(self.pinputs) + i - 1
+            idx = len(self.pinputs) + i
             calib[idx] = CalibReg(calib[idx].gain, raw)
 
-        logging.info("ADC calibration (double-ended mode):")
         self.print_calib(calib)
         self.set_adc_calib(calib)
 
@@ -224,10 +226,7 @@ class CalibDAQ(DAQ):
     def test_dac(self, meter=None):
         logging.info(title("DAC calibration test"))
 
-        if self.hw_ver == "[S]":
-            volts = [1, 2, 3]
-        else:
-            volts = [-3, -1, 0, 1, 3]
+        volts = range(int(self.dac_range[0]), int(self.dac_range[1]) + 1)
 
         if meter:
             x, y = self.measure_dac(volts, meter)
@@ -348,6 +347,7 @@ def calib_cmd(args, test=False):
         daq.calibrate_dac(dac_file=args.dac, meter=meter)
 
         if daq.hw_ver == "[S]":
+            pass
             daq.calibrate_se()
             daq.calibrate_de()
         else:

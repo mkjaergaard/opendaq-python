@@ -84,18 +84,14 @@ class DAQModel(object):
         """
 
         time.sleep(.05)
-        # print "DAC slots read:"
         for i in range(len(self.dac_calib)):
             gain, offset = read_slot(i)
-            # print i, "<<", gain, offset
             self.dac_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**16)
 
     def load_adc_calib(self, read_slot):
         time.sleep(.05)
-        # print "ADC slots read:"
         for i in range(len(self.adc_calib)):
             gain, offset = read_slot(i + len(self.dac_calib))
-            # print i, "<<", gain, offset
             self.adc_calib[i] = CalibReg(1. + gain/2.**16, offset/2.**5)
 
     def write_dac_calib(self, regs, write_slot):
@@ -167,7 +163,6 @@ class DAQModel(object):
         """
         # obtain the calibration gains and offsets
         slot1, slot2 = self._get_adc_slots(gain_id, pinput, ninput)
-        print "slots:", slot1, slot2
         gain1, offs1 = (1., 0.) if slot1 < 0 else self.adc_calib[slot1]
         gain2, offs2 = (1., 0.) if slot2 < 0 else self.adc_calib[slot2]
 

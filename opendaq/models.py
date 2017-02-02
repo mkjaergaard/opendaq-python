@@ -67,7 +67,7 @@ class ModelS(DAQModel):
             adc=ADC(bits=16, vmin=-12.0, vmax=12.0,
                     pga_gains=Gains.S.values,
                     pinputs=list(range(1, 9)),
-                    ninputs=[0])
+                    ninputs=list(range(0, 9)))
         )
 
     def check_adc_settings(self, pinput, ninput, gain):

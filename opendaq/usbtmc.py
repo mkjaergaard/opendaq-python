@@ -1,3 +1,4 @@
+from __future__ import print_function
 import os
 
 # function modes
@@ -26,14 +27,14 @@ class usbtmc:
         # TODO: Test that the file opened
 
     def write(self, command):
-        os.write(self.FILE, command)
+        os.write(self.FILE, bytearray(command, 'ascii'))
 
     def read(self, length=4000):
         return os.read(self.FILE, length)
 
     def getName(self):
         self.write("*IDN?")
-        return self.read(300)
+        return str(self.read(300))
 
     def sendReset(self):
         self.write("*RST")
@@ -74,7 +75,7 @@ class RigolDM3058:
 
 if __name__ == "__main__":
     rigol = RigolDM3058("/dev/usbtmc1")
-    print rigol.name
+    print(rigol.name)
 
     for i in range(10):
-        print rigol.measure('volt_dc')
+        print(rigol.measure('volt_dc'))
