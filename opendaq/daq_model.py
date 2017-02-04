@@ -170,7 +170,8 @@ class DAQModel(object):
         pga_gain = self.adc.pga_gains[gain_id]
 
         gain = adc_gain*pga_gain*gain1*gain2
-        offset = offs1*pga_gain + offs2
+        offset = offs1 + offs2*pga_gain
+
         return (raw - offset)/gain
 
     def __check_dac_value(self, volts):

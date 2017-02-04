@@ -70,23 +70,40 @@ class CalibDAQ(DAQ):
         return values, y
 
     def calibrate_dac(self, dac_file=None, meter=None):
-        if meter:
-            volts = range(int(self.dac_range[0]), int(self.dac_range[1]) + 1)
-            x, y = self.measure_dac(volts, meter)
-            logging.info("Values measured with the USB multimeter:")
+        if self.hw_ver != "[N]":
+            if meter:
+                volts = range(int(self.dac_range[0]), int(self.dac_range[1]) + 1)
+                x, y = self.measure_dac(volts, meter)
+                logging.info("Values measured with the USB multimeter:")
+            else:
+                x, y = np.loadtxt(dac_file, unpack=True)
+                logging.info("Values loaded from %s:" % dac_file)
+
+            logging.info(ExpectedValuesTable(zip(x, y)))
+
+            gain, offset = np.polyfit(x, y, 1)
+            calib = self.get_dac_calib()[0]
+            new_calib = CalibReg(calib.gain*gain, calib.offset + offset)
+            self.set_dac_calib([new_calib])
+
+            logging.info("New DAC calibration:")
+            self.print_calib([new_calib])
         else:
-            x, y = np.loadtxt(dac_file, unpack=True)
+            x, y, z = np.loadtxt(dac_file, unpack=True)
             logging.info("Values loaded from %s:" % dac_file)
 
-        logging.info(ExpectedValuesTable(zip(x, y)))
+            logging.info(ExpectedValuesTable(zip(x, y)))
+            logging.info(ExpectedValuesTable(zip(x, z)))
 
-        gain, offset = np.polyfit(x, y, 1)
-        calib = self.get_dac_calib()[0]
-        new_calib = CalibReg(calib.gain*gain, calib.offset + offset)
-        self.set_dac_calib([new_calib])
+            gain1, offset1 = np.polyfit(x, y, 1)
+            gain2, offset2 = np.polyfit(x, z, 1)
 
-        logging.info("New DAC calibration:")
-        self.print_calib([new_calib])
+            new_calib = []
+            new_calib.append(CalibReg(gain1, offset1))
+            new_calib.append(CalibReg(gain2, offset2))
+
+            logging.info("New DAC calibration:")
+            self.print_calib(new_calib)
 
     def print_calib(self, calib):
         rows = [['Gain', 'Offset']]
@@ -105,23 +122,25 @@ class CalibDAQ(DAQ):
         offsets_ampli = []
         for ch in self.pinputs:
             logging.info("AIN %d:" % ch)
+            a = []
             b = []
             for i, pga in enumerate(self.pga_gains):
                 self.conf_adc(ch, 0, i)
                 raw = self.read_adc()
+                a.append(pga)
                 b.append(raw)
                 logging.info("  x%d:\t%d\t%0.4f" % (pga, raw, self.read_analog()))
 
-            _, offset = np.polyfit(self.pga_gains, b, 1)
-            logging.info("  offset=%.2f" % offset)
+            corr_gain, corr_offset = np.polyfit(a, b, 1)
+            logging.info("m=%1.2f  b=%.2f" % (corr_gain, corr_offset))
 
-            calib[ch - 1] = CalibReg(calib[ch - 1].gain, offset)
+            calib[ch - 1] = CalibReg(calib[ch - 1].gain, corr_offset)
 
             if self.hw_ver == "[N]":
                 idx = len(self.pinputs) + ch - 1
-                calib[idx] = CalibReg(calib[idx].gain, offset)
+                calib[idx] = CalibReg(calib[idx].gain, corr_gain)
 
-            offsets_ampli.append(offset)
+            offsets_ampli.append(corr_gain)
 
         if self.hw_ver == "[M]":
             off = np.mean(offsets_ampli)
@@ -135,27 +154,29 @@ class CalibDAQ(DAQ):
     def calibrate_adc_gain(self):
         logging.info(title("Calibrating ADC gain"))
 
-        self.set_analog(1)
-        logging.info("1 Volt -->")
+        volts = 2
+        self.set_analog(volts)
+        logging.info("%d Volts -->", volts)
 
         calib = self.get_adc_calib()
 
         for ch in self.pinputs:
             self.conf_adc(ch, 0, 0)
-            value = self.read_analog()
+            value = self.read_analog()/volts
             calib[ch - 1] = CalibReg(value, calib[ch - 1].offset)
             logging.info("%d --> %0.4f" % (ch, value))
 
-        for i, pga in enumerate(self.pga_gains):
-            volts = 1./pga
-            self.set_analog(volts)
-            a = []
-            for ch in self.pinputs:
-                self.conf_adc(ch, 0, i)
-                value = self.read_analog()
-                a.append(value/volts)
-            idx = len(self.pinputs) + i - 1
-            calib[idx] = CalibReg(np.mean(a), calib[idx].offset)
+        if self.hw_ver == "[M]":
+            for i, pga in enumerate(self.pga_gains):
+                volts = 1./pga
+                self.set_analog(volts)
+                a = []
+                for ch in self.pinputs:
+                    self.conf_adc(ch, 0, i)
+                    value = self.read_analog()
+                    a.append(value/volts)
+                idx = len(self.pinputs) + i - 1
+                calib[idx] = CalibReg(np.mean(a), calib[idx].offset)
 
         logging.info("ADC calibration:")
         self.print_calib(calib)
@@ -337,6 +358,10 @@ def calib_cmd(args, test=False):
     elif args.reset:
         logging.info("Resetting calibration values")
         daq.reset_calib()
+    elif args.dac:
+        logging.info(title("Calibrating DAC"))
+        meter = usbtmc.RigolDM3058(args.meter) if args.auto else None
+        daq.calibrate_dac(dac_file=args.file, meter=meter)
     else:
         logging.info("Resetting calibration values")
         daq.reset_calib()
@@ -344,7 +369,7 @@ def calib_cmd(args, test=False):
         logging.info(title("Calibrating DAC"))
 
         meter = usbtmc.RigolDM3058(args.meter) if args.auto else None
-        daq.calibrate_dac(dac_file=args.dac, meter=meter)
+        daq.calibrate_dac(dac_file=args.file, meter=meter)
 
         if daq.hw_ver == "[S]":
             pass
@@ -378,13 +403,15 @@ def main():
     iparser.set_defaults(func=info_cmd)
 
     # 'calib' command parser
-    cparser = subparsers.add_parser('calib', help='Calibrate the device')
+    cparser = subparsers.add_parser('calib', help='Calibrate the devices')
     cparser.add_argument('-l', '--log', action='store_true',
                          help='Generate log file'),
     cparser.add_argument('-r', '--reset', action='store_true',
                          help='Reset calibration')
-    cparser.add_argument('-d', '--dac', default='calib.txt',
-                         help='Load DAQ calibration values from a file '
+    cparser.add_argument('-d', '--dac', action='store_true',
+                         help='Apply only DAC calibration')
+    cparser.add_argument('-f', '--file', default='calib.txt',
+                         help='Select file to load DAC parameters from'
                          '(default: calib.txt)')
     cparser.add_argument('-s', '--show', action='store_true',
                          help='Show calibration values')

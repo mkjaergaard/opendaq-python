@@ -255,7 +255,7 @@ class DAQ(threading.Thread):
         :param volts: DAC output value in volts.
         :raises: ValueError
         """
-        self.set_dac(self.__model.volts_to_raw(volts, number-1), number)
+        self.set_dac(self.__model.volts_to_raw(volts, number - 1), number)
 
     def read_adc(self):
         """Read data from ADC and return the raw value.

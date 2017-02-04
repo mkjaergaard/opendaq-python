@@ -27,8 +27,8 @@ class Gains:
     """Valid PGA gains by OpenDAQ model."""
     M = PGAGains.new([1./3, 1, 2, 10, 100])
     S = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 20])
-    N = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 20])
-    TP04 = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 20])
+    N = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 32])
+    TP04 = PGAGains.new([1, 2, 4, 5, 8, 10, 16, 32])
     TP08 = PGAGains.new([1, 2, 4, 8, 16, 32, 64, 128])
 
 
