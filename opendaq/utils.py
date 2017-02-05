@@ -124,7 +124,7 @@ class CalibDAQ(DAQ):
             logging.info("AIN %d:" % ch)
             a = []
             b = []
-            for i, pga in enumerate(self.pga_gains):
+            for i, pga in enumerate(self.pga_gains[:-1]):
                 self.conf_adc(ch, 0, i)
                 raw = self.read_adc()
                 a.append(pga)
@@ -145,7 +145,7 @@ class CalibDAQ(DAQ):
         if self.hw_ver == "[M]":
             off = np.mean(offsets_ampli)
             for i, _ in enumerate(self.pga_gains):
-                idx = len(self.pinputs) + i - 1
+                idx = len(self.pinputs) + i
                 calib[idx] = CalibReg(calib[idx].gain, off)
 
         self.set_adc_calib(calib)
@@ -167,15 +167,18 @@ class CalibDAQ(DAQ):
             logging.info("%d --> %0.4f" % (ch, value))
 
         if self.hw_ver == "[M]":
-            for i, pga in enumerate(self.pga_gains):
+            # TODO: Not considering pga X100 because it caused a crash
+            for i, pga in enumerate(self.pga_gains[1:-1]):
                 volts = 1./pga
                 self.set_analog(volts)
+                logging.info("\nx%1.1f -> %f V", pga, volts)
                 a = []
                 for ch in self.pinputs:
                     self.conf_adc(ch, 0, i)
                     value = self.read_analog()
                     a.append(value/volts)
-                idx = len(self.pinputs) + i - 1
+                idx = len(self.pinputs) + i + 1
+                logging.info("Mean: %f\n", np.mean(a))
                 calib[idx] = CalibReg(np.mean(a), calib[idx].offset)
 
         logging.info("ADC calibration:")
