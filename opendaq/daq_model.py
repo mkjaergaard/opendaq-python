@@ -82,7 +82,6 @@ class DAQModel(object):
         :param read_slot: Callback function that returns the raw
             calibration values (gain and offset) of a slot, given its index.
         """
-
         time.sleep(.05)
         for i in range(len(self.dac_calib)):
             gain, offset = read_slot(i)
@@ -102,13 +101,12 @@ class DAQModel(object):
         """
         if len(regs) != len(self.dac_calib):
             raise IndexError("Invalid number of calibration registers")
-
         time.sleep(.05)
         for i, reg in enumerate(regs):
             if type(reg) is not CalibReg:
                 raise ValueError("Registers must be instances of CalibReg")
-
             write_slot(i, (reg.gain - 1.)*2**16, reg.offset*2**16)
+            time.sleep(.05)
             self.dac_calib[i] = reg
 
     def write_adc_calib(self, regs, write_slot):
@@ -122,6 +120,7 @@ class DAQModel(object):
 
             j = i + len(self.dac_calib)
             write_slot(j, (reg.gain - 1.)*2**16, reg.offset*2**5)
+            time.sleep(.05)
             self.adc_calib[i] = reg
 
     def check_pio(self, number):
@@ -164,13 +163,16 @@ class DAQModel(object):
         # obtain the calibration gains and offsets
         slot1, slot2 = self._get_adc_slots(gain_id, pinput, ninput)
         gain1, offs1 = (1., 0.) if slot1 < 0 else self.adc_calib[slot1]
+        # print "slot1:", gain1, offs1
         gain2, offs2 = (1., 0.) if slot2 < 0 else self.adc_calib[slot2]
+        # print "slot1:", gain2, offs2
 
         adc_gain = 2.**(self.adc.bits-1)/self.adc.vmax
         pga_gain = self.adc.pga_gains[gain_id]
 
         gain = adc_gain*pga_gain*gain1*gain2
         offset = offs1 + offs2*pga_gain
+        # print raw, offset, gain
 
         return (raw - offset)/gain
 

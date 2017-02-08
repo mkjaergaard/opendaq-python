@@ -48,7 +48,10 @@ class CalibDAQ(DAQ):
         model = DAQModel.new(*self.get_info())
         self.pinputs = model.adc.pinputs
         self.pga_gains = model.adc.pga_gains
+        self.dac_slots = model.dac_slots
+        self.npios = model.npios
         self.dac_range = (model.dac.vmin, model.dac.vmax)
+        self.adc_range = (model.adc.vmin, model.adc.vmax)
 
     def read_analog(self):
         self.read_adc()
@@ -70,7 +73,7 @@ class CalibDAQ(DAQ):
         return values, y
 
     def calibrate_dac(self, dac_file=None, meter=None):
-        if self.hw_ver != "[N]":
+        if self.dac_slots < 2:
             if meter:
                 volts = range(int(self.dac_range[0]), int(self.dac_range[1]) + 1)
                 x, y = self.measure_dac(volts, meter)
@@ -104,6 +107,7 @@ class CalibDAQ(DAQ):
 
             logging.info("New DAC calibration:")
             self.print_calib(new_calib)
+            self.set_dac_calib(new_calib)
 
     def print_calib(self, calib):
         rows = [['Gain', 'Offset']]
@@ -114,7 +118,12 @@ class CalibDAQ(DAQ):
     def calibrate_adc_offset(self):
         logging.info(title("Calibrating ADC offset"))
 
-        self.set_analog(0)
+        if self.dac_slots < 2:
+            self.set_analog(0)
+        else:
+            while not yes_no("Set 0V at all inputs.\nPress 'y' when ready.\n"):
+                pass
+
         logging.info("0 Volts -->")
 
         calib = self.get_adc_calib()
@@ -124,7 +133,7 @@ class CalibDAQ(DAQ):
             logging.info("AIN %d:" % ch)
             a = []
             b = []
-            for i, pga in enumerate(self.pga_gains[:-1]):
+            for i, pga in enumerate(self.pga_gains):
                 self.conf_adc(ch, 0, i)
                 raw = self.read_adc()
                 a.append(pga)
@@ -136,7 +145,7 @@ class CalibDAQ(DAQ):
 
             calib[ch - 1] = CalibReg(calib[ch - 1].gain, corr_offset)
 
-            if self.hw_ver == "[N]":
+            if self.hw_ver != "[M]":
                 idx = len(self.pinputs) + ch - 1
                 calib[idx] = CalibReg(calib[idx].gain, corr_gain)
 
@@ -154,21 +163,30 @@ class CalibDAQ(DAQ):
     def calibrate_adc_gain(self):
         logging.info(title("Calibrating ADC gain"))
 
-        volts = 2
-        self.set_analog(volts)
+        if self.dac_slots < 2:
+            volts = 2
+            self.set_analog(volts)
+        else:
+            while not yes_no("Set 6V at all inputs.\nPress 'y' when ready."):
+                pass
+            volts = 6
+            self.set_analog(0, 1)
+            self.set_analog(0, 2)
+
         logging.info("%d Volts -->", volts)
 
         calib = self.get_adc_calib()
 
         for ch in self.pinputs:
             self.conf_adc(ch, 0, 0)
+            time.sleep(.05)
             value = self.read_analog()/volts
             calib[ch - 1] = CalibReg(value, calib[ch - 1].offset)
-            logging.info("%d --> %0.4f" % (ch, value))
+            logging.info("%d --> %0.4f (%d)" % (ch, value, self.read_adc()))
 
         if self.hw_ver == "[M]":
             # TODO: Not considering pga X100 because it caused a crash
-            for i, pga in enumerate(self.pga_gains[1:-1]):
+            for i, pga in enumerate(self.pga_gains[1:]):
                 volts = 1./pga
                 self.set_analog(volts)
                 logging.info("\nx%1.1f -> %f V", pga, volts)
@@ -194,6 +212,7 @@ class CalibDAQ(DAQ):
         for ch in self.pinputs:
             logging.info("AIN %d:" % ch)
             self.conf_adc(ch, 0)
+            self.read_adc()
             a = []
             b = []
             for v in volts:
@@ -282,6 +301,32 @@ class CalibDAQ(DAQ):
                     rows.append(['%1.1f V' % volts, '%1.3f V' % val,
                                  '%0.2f %%' % err])
                 logging.info(AsciiTable(rows).table)
+        elif self.hw_ver in ["TP08", "TP04AR", "TP04AB"]:
+            volts = 0
+            for i, gain in enumerate(self.pga_gains):
+                if gain < 5 and volts != 5:
+                    while not yes_no("Set 5 V at all inputs.\nPress 'y' when ready."):
+                        pass
+                    volts = 5
+                elif 5 < gain < 16 and volts != 1:
+                    while not yes_no("Set 1 V at all inputs.\nPress 'y' when ready."):
+                        pass
+                    volts = 1
+                elif gain == 32 and volts != 0.5:
+                    while not yes_no("Set 0.5 V at all inputs.\nPress 'y' when ready."):
+                        pass
+                    volts = .5
+
+                max_ref = min(24., 24./gain)
+                logging.info("Gain: x%d Target: %.2f V" % (gain, volts))
+
+                rows = [['Input', 'Read', 'Error']]
+                for pinput in self.pinputs:
+                    self.conf_adc(pinput, 0, i)
+                    val = self.read_analog()
+                    err = abs(100 * (val - volts) / max_ref)
+                    rows.append([pinput, '%1.3f V' % val, '%0.2f %%' % err])
+                logging.info(AsciiTable(rows).table)
         else:
             for i, gain in enumerate(self.pga_gains):
                 if self.hw_ver == '[N]':
@@ -350,9 +395,11 @@ def calib_cmd(args, test=False):
 
     if test:
         meter = usbtmc.RigolDM3058(args.meter) if args.auto else None
-        daq.test_dac(meter)
+        if daq.dac_slots < 2:
+            daq.test_dac(meter)
         daq.test_adc()
-        daq.test_pio()
+        if daq.npios > 0:
+            daq.test_pio()
     elif args.show:
         logging.info(title("DAC calibration"))
         daq.print_calib(daq.get_dac_calib())
@@ -410,11 +457,11 @@ def main():
     cparser.add_argument('-l', '--log', action='store_true',
                          help='Generate log file'),
     cparser.add_argument('-r', '--reset', action='store_true',
-                         help='Reset calibration')
+                         help='Reset calibration values')
     cparser.add_argument('-d', '--dac', action='store_true',
-                         help='Apply only DAC calibration')
+                         help='Apply DAC calibration and exit')
     cparser.add_argument('-f', '--file', default='calib.txt',
-                         help='Select file to load DAC parameters from'
+                         help='Select file source to load DAC parameters'
                          '(default: calib.txt)')
     cparser.add_argument('-s', '--show', action='store_true',
                          help='Show calibration values')

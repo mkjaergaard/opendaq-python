@@ -115,7 +115,7 @@ class ModelTP08ABRR(DAQModel):
             self, fw_ver, serial,
             model_str='TP08', serial_fmt='TP08x10%04d',
             adc_slots=8, dac_slots=4, npios=4, nleds=8,
-            dac=DAC(bits=16, vmin=-1.25, vmax=1.25),
+            dac=DAC(bits=16, vmin=-23.75, vmax=23.75),
             adc=ADC(bits=16, vmin=-23.75, vmax=23.75,
                     pga_gains=Gains.TP08.values,
                     pinputs=[1, 2, 3, 4], ninputs=[0])
@@ -133,7 +133,7 @@ class ModelTP04AR(DAQModel):
             self, fw_ver, serial,
             model_str='TP04AR', serial_fmt='TP04x11%04d',
             adc_slots=4, dac_slots=2, npios=2, nleds=2,
-            dac=DAC(bits=16, vmin=-1.25, vmax=1.25),
+            dac=DAC(bits=16, vmin=-24.0, vmax=24.0),
             adc=ADC(bits=16, vmin=-24.0, vmax=24.0,
                     pga_gains=Gains.TP04.values,
                     pinputs=[1, 2], ninputs=[0])
@@ -151,7 +151,7 @@ class ModelTP04AB(DAQModel):
             self, fw_ver, serial,
             model_str='TP04AB', serial_fmt='TP04x12%04d',
             adc_slots=8, dac_slots=2, npios=0, nleds=4,
-            dac=DAC(bits=16, vmin=-1.25, vmax=1.25),
+            dac=DAC(bits=16, vmin=-24.0, vmax=24.0),
             adc=ADC(bits=16, vmin=-24.0, vmax=24.0,
                     pga_gains=Gains.TP04.values,
                     pinputs=[1, 2, 3, 4], ninputs=[0])
