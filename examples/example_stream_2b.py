@@ -24,7 +24,7 @@ for i in range(4):
     print("data1", stream1.read())
     print("data2", stream2.read())
 
-daq.halt()
+daq.stop()
 
 stream2.analog_setup(pinput=6, gain=Gains.S.x1)
 

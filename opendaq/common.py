@@ -19,6 +19,7 @@
 # along with opendaq.  If not, see <http://www.gnu.org/licenses/>.
 
 import struct
+import array
 
 
 class CRCError(ValueError):
@@ -79,3 +80,37 @@ def str2hex(data):
     """Hexdump binary data."""
     hexstr = ["%02x" % c for c in bytearray(data)]
     return ' '.join(hexstr)
+
+
+NAK = mkcmd(160, '')
+
+def parse_command(data, fmt, length):
+    if data == NAK:
+        raise IOError("NAK response received")
+
+    if len(data) != length:
+        raise LengthError("Bad packet length %d (it should be %d)" %
+                          (len(data), length))
+
+    data = struct.unpack(fmt, check_crc(data))
+    if data[1] != length - 4:
+        raise LengthError("Bad body length %d (it should be %d)" %
+                          (length - 4, data[1]))
+    # Strip 'command' and 'length' values from returned data
+    return data[2:]
+
+
+def escape_bytes(data, escape_code):
+    newdata = []
+    escape = False
+
+    for b in data:
+        if b == escape_code:
+            escape = True
+        elif escape:
+            newdata.append(ord(b) ^ 0x20)
+            escape = False
+        else:
+            newdata.append(ord(b))
+
+    return array.array('B', newdata).tostring()

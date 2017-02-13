@@ -16,7 +16,7 @@ stream1.analog_setup(pinput=8, gain=Gains.S.x1)
 signal = list(range(4))
 
 stream2 = daq.create_stream(ExpMode.ANALOG_OUT, 300, npoints=len(signal))
-stream2.load_signal(signal, clear=True)
+stream2.load_signal(signal)
 
 daq.start()
 

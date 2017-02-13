@@ -151,10 +151,10 @@ class DAQModel(object):
 
     def raw_to_volts(self, raw, gain_id, pinput, ninput=0):
         """
-        Convert a raw value to a value in volts.
+        Convert a raw value or a list of values to volts.
         Device calibration values are used for the calculation.
 
-        :param raw: Value to convert to volts.
+        :param raw: Value or list of values to be converted.
         :param gain_id: ID of the analog configuration setup.
         :param pinput: Positive input.
         :param ninput: Negative input.
@@ -171,7 +171,10 @@ class DAQModel(object):
         gain = adc_gain*pga_gain*gain1*gain2
         offset = offs1 + offs2*pga_gain
 
-        return (raw - offset)/gain
+        try:
+            return [(v - offset)/gain for v in raw]
+        except TypeError:
+            return (raw - offset)/gain
 
     def __check_dac_value(self, volts):
         if not (self.dac.vmin <= volts <= self.dac.vmax):

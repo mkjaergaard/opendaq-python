@@ -22,18 +22,68 @@ from __future__ import print_function
 from __future__ import division
 import time
 import struct
+import array
 import serial
-import threading
+from threading import Thread
 from enum import IntEnum
-from .common import check_crc, check_stream_crc, mkcmd
+from .common import check_stream_crc, mkcmd, parse_command, str2hex, escape_bytes
 from .common import LengthError, CRCError
 from .experiment import Trigger, ExpMode, DAQStream, DAQBurst, DAQExternal
 from .simulator import DAQSimulator
 from .models import DAQModel
 
 BAUDS = 115200
-NAK = mkcmd(160, '')
 MAX_CHANNELS = 4
+
+
+class CMD(IntEnum):
+    AIN = 1
+    AIN_CFG = 2
+    PIO = 3
+    AIN_ALL = 4
+    PIO_DIR = 5
+    PORT = 7
+    PORT_DIR = 9
+    PWM_INIT = 10
+    PWM_STOP = 11
+    PWM_DUTY = 12
+    SET_DAC = 13
+    CAPTURE_INIT = 14
+    CAPTURE_STOP = 15
+    GET_CAPTURE = 16
+    WAIT_MS = 17
+    LED_W = 18
+    STREAM_CREATE = 19
+    EXTERNAL_CREATE = 20
+    BURST_CREATE = 21
+    CHANNEL_CFG = 22
+    SIGNAL_LOAD = 23
+    SET_ANALOG = 24
+    STREAM_DATA = 25
+    SPISW_CONFIG = 26
+    RESET = 27
+    SPISW_SETUP = 28
+    SPISW_TRANSFER = 29
+    EEPROM_WRITE = 30
+    EEPROM_READ = 31
+    CHANNEL_SETUP = 32
+    TRIGGER_SETUP = 33
+    GET_TRIGGER_MODE = 34
+    GET_STATE_CHANNEL = 35
+    GET_CALIB = 36
+    SET_CALIB = 37
+    RESET_CALIB = 38
+    ID_CONFIG = 39
+    COUNTER_INIT = 41
+    GET_COUNTER = 42
+    CHANNEL_FLUSH = 45
+    ENCODER_INIT = 50
+    ENCODER_STOP = 51
+    GET_ENCODER = 52
+    ENABLE_CRC = 55
+    CHANNEL_DESTROY = 57
+    STREAM_START = 64
+    STREAM_STOP = 80
 
 
 class LedColor(IntEnum):
@@ -44,7 +94,7 @@ class LedColor(IntEnum):
     ORANGE = 3
 
 
-class DAQ(threading.Thread):
+class DAQ(object):
     """This class represents an OpenDAQ device."""
 
     def __init__(self, port, debug=False):
@@ -52,18 +102,16 @@ class DAQ(threading.Thread):
         :param port: Serial port.
         :param debug: Turn on serial echoing to sdout.
         """
-        threading.Thread.__init__(self)
         self.__port = port
         self.__debug = debug
         self.__simulate = (port == 'sim')
 
-        self.__running = False
         self.__measuring = False
-        self.__stopping = False
         self.__gain = 0
         self.__pinput = 1
         self.__ninput = 0
         self.__exp = []     # list of experiments
+        self.__thread = None
 
         self.open()
 
@@ -72,11 +120,15 @@ class DAQ(threading.Thread):
         self.fw_ver = self.__model.fw_ver
         self.__model.load_dac_calib(self.__read_calib_slot)
         self.__model.load_adc_calib(self.__read_calib_slot)
+        self.clear_experiments()
 
     def open(self):
         """Open the serial port."""
-        if self.__simulate:
+        if self.__port == 'sim':
             self.ser = DAQSimulator(self.__port, BAUDS, timeout=1)
+        elif 'simavr' in self.__port:
+            self.ser = serial.Serial(self.__port, BAUDS, timeout=10,
+                                     rtscts=True, dsrdtr=True)
         else:
             self.ser = serial.Serial(self.__port, BAUDS, timeout=1)
             self.ser.setRTS(0)
@@ -86,50 +138,38 @@ class DAQ(threading.Thread):
         """Close the serial port."""
         self.ser.close()
 
-    def send_command(self, command, ret_fmt):
+    def send_command(self, command, ret_fmt=None):
         """Build a command packet, send it to the openDAQ and process the
         response.
 
         :param command: Command string.
         :param ret_fmt: Payload format of the response using python 'struct'
-            format characters.
+            format characters. I ret_fmt is None, no response is expected.
         :returns: Command ID and arguments of the response.
         :raises: LengthError: The legth of the response is not the expected.
         """
+        self.ser.write(command)
+        if self.__debug:
+            print("SENT:", str2hex(command))
+
+        if ret_fmt is None:
+            return
+
         fmt = '!BB' + ret_fmt
         ret_len = 2 + struct.calcsize(fmt)
-        self.ser.write(command)
         ret = self.ser.read(ret_len)
         if self.__debug:
-            print("Command:  ", end=" ")
-            for c in command:
-                print("%02X" % ord(c), end=" ")
-            print()
-            print("Response: ", end=' ')
-            for c in ret:
-                print("%02X" % ord(c), end=" ")
-            print()
+            print("RECV:", str2hex(ret))
 
-        if ret == NAK:
-            raise IOError("NAK response received")
-
-        if len(ret) != ret_len:
-            raise LengthError("Bad packet length %d (it should be %d)" %
-                              (len(ret), ret_len))
-
-        data = struct.unpack(fmt, check_crc(ret))
-        if data[1] != ret_len - 4:
-            raise LengthError("Bad body length %d (it should be %d)" %
-                              (ret_len - 4, data[1]))
-        # Strip 'command' and 'length' values from returned data
-        return data[2:]
+        return parse_command(ret, fmt, ret_len)
 
     def enable_crc(self, on):
         """Enable/Disable the cyclic redundancy check.
 
         :param on: Enable/disable CRC checking (bool).
         """
-        return self.send_command(mkcmd(55, 'B', int(bool(on))), 'B')[0]
+        return self.send_command(mkcmd(CMD.ENABLE_CRC, 'B',
+                                       int(bool(on))), 'B')[0]
 
     def __read_calib_slot(self, slot):
         """Read a calibration slot.
@@ -140,7 +180,7 @@ class DAQ(threading.Thread):
             - Offset raw correction
         :raises: ValueError
         """
-        return self.send_command(mkcmd(36, 'B', slot), 'Bhh')[1:]
+        return self.send_command(mkcmd(CMD.GET_CALIB, 'B', slot), 'Bhh')[1:]
 
     def __write_calib_slot(self, slot_id, gain, offset):
         """Write a calibration slot.
@@ -154,7 +194,7 @@ class DAQ(threading.Thread):
             - Offset raw correction
         :raises: ValueError
         """
-        return self.send_command(mkcmd(37, 'Bhh', slot_id,
+        return self.send_command(mkcmd(CMD.SET_CALIB, 'Bhh', slot_id,
                                        int(gain), int(offset)), 'Bhh')
 
     def get_dac_calib(self):
@@ -196,7 +236,7 @@ class DAQ(threading.Thread):
         if not 0 <= id < 1000:
             raise ValueError("id out of range")
 
-        return self.send_command(mkcmd(39, 'I', id), 'BBI')
+        return self.send_command(mkcmd(CMD.ID_CONFIG, 'I', id), 'BBI')
 
     @property
     def serial_str(self):
@@ -207,7 +247,7 @@ class DAQ(threading.Thread):
 
         :returns: [hardware_version, firmware_version, device_id]
         """
-        return self.send_command(mkcmd(39, ''), 'BBI')
+        return self.send_command(mkcmd(CMD.ID_CONFIG, ''), 'BBI')
 
     def __str__(self):
         return ("Hardware version: %s\n"
@@ -226,7 +266,7 @@ class DAQ(threading.Thread):
         if not 0 <= pos < 254:
             raise ValueError("pos out of range")
 
-        return self.send_command(mkcmd(31, 'BB', pos, 1), 'BBB')[2]
+        return self.send_command(mkcmd(CMD.EEPROM_READ, 'BB', pos, 1), 'BBB')[2]
 
     def write_eeprom(self, pos, val):
         """Write a byte in the EEPROM.
@@ -237,7 +277,7 @@ class DAQ(threading.Thread):
         if not 0 <= pos < 254:
             raise ValueError("pos out of range")
 
-        return self.send_command(mkcmd(30, 'BBB', pos, 1, val), 'BBB')
+        return self.send_command(mkcmd(CMD.EEPROM_WRITE, 'BBB', pos, 1, val), 'BBB')
 
     def set_dac(self, raw, number=1):
         """Set DAC output (raw value).
@@ -246,7 +286,7 @@ class DAQ(threading.Thread):
         "param raw: Raw ADC value.
         :raises: ValueError
         """
-        self.send_command(mkcmd(13, 'hB', int(round(raw)), number), 'hB')[0]
+        self.send_command(mkcmd(CMD.SET_DAC, 'hB', int(round(raw)), number), 'hB')[0]
 
     def set_analog(self, volts, number=1):
         """Set DAC output (volts).
@@ -262,14 +302,14 @@ class DAQ(threading.Thread):
 
         :returns: Raw ADC value.
         """
-        return self.send_command(mkcmd(1, ''), 'h')[0]
+        return self.send_command(mkcmd(CMD.GET, ''), 'h')[0]
 
     def read_analog(self):
         """Read data from ADC in volts.
 
         :returns: Voltage value.
         """
-        value = self.send_command(mkcmd(1, ''), 'h')[0]
+        value = self.send_command(mkcmd(CMD.AIN, ''), 'h')[0]
         return self.__model.raw_to_volts(value, self.__gain, self.__pinput,
                                          self.__ninput)
 
@@ -283,7 +323,7 @@ class DAQ(threading.Thread):
         if self.__model.fw_ver < 120:
             raise Warning("Function not implemented in this FW. Try updating")
 
-        values = self.send_command(mkcmd(4, 'BB', nsamples, gain), '8h')
+        values = self.send_command(mkcmd(CMD.AIN_ALL, 'BB', nsamples, gain), '8h')
         return [self.__model.raw_to_volts(v, gain, i, 0) for i, v in
                 enumerate(values)]
 
@@ -308,8 +348,8 @@ class DAQ(threading.Thread):
         self.__pinput = pinput
         self.__ninput = ninput
 
-        self.send_command(mkcmd(2, 'BBBB', pinput, ninput, int(gain),
-                                nsamples), 'hBBBB')
+        self.send_command(mkcmd(CMD.AIN_CFG, 'BBBB', pinput, ninput,
+                                int(gain), nsamples), 'hBBBB')
 
     def set_led(self, color, number=1):
         """Choose LED status.
@@ -324,7 +364,8 @@ class DAQ(threading.Thread):
         if not 1 <= number <= self.__model.nleds:
             raise ValueError("Invalid LED number")
 
-        self.send_command(mkcmd(18, 'BB', color.value, number), 'BB')[0]
+        self.send_command(mkcmd(CMD.LED_W, 'BB',
+                                color.value, number), 'BB')
 
     def set_pio(self, number, value):
         """Write PIO output value.
@@ -339,7 +380,8 @@ class DAQ(threading.Thread):
         if value not in [0, 1]:
             raise ValueError("digital value out of range")
 
-        self.send_command(mkcmd(3, 'BB', number, int(bool(value))), 'BB')[1]
+        self.send_command(mkcmd(CMD.PIO, 'BB', number,
+                                int(bool(value))), 'BB')[1]
 
     def read_pio(self, number):
         """Read PIO input value (0: low, 1: high).
@@ -350,7 +392,7 @@ class DAQ(threading.Thread):
         """
         self.__model.check_pio(number)
 
-        return self.send_command(mkcmd(3, 'B', number), 'BB')[1]
+        return self.send_command(mkcmd(CMD.PIO, 'B', number), 'BB')[1]
 
     def set_pio_dir(self, number, output):
         """Configure PIO direction.
@@ -365,7 +407,8 @@ class DAQ(threading.Thread):
         if output not in [0, 1]:
             raise ValueError("PIO direction out of range")
 
-        self.send_command(mkcmd(5, 'BB', number, int(bool(output))), 'BB')
+        self.send_command(mkcmd(CMD.PIO_DIR, 'BB', number,
+                                int(bool(output))), 'BB')
 
     def set_port(self, value):
         """Write all PIO values.
@@ -375,14 +418,14 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
         self.__model.check_port(value)
-        self.send_command(mkcmd(7, 'B', value), 'B')[0]
+        self.send_command(mkcmd(CMD.PORT, 'B', value), 'B')[0]
 
     def read_port(self):
         """Read all PIO values.
 
         :returns: Binary value of the port.
         """
-        return self.send_command(mkcmd(7, ''), 'B')[0]
+        return self.send_command(mkcmd(CMD.PORT, ''), 'B')[0]
 
     def set_port_dir(self, output):
         """Configure all PIOs directions.
@@ -392,7 +435,7 @@ class DAQ(threading.Thread):
         :raises: ValueError
         """
         self.__model.check_port(output)
-        self.send_command(mkcmd(9, 'B', output), 'B')
+        self.send_command(mkcmd(CMD.PORT_DIR, 'B', output), 'B')
 
     def spi_config(self, cpol, cpha):
         """Bit-Bang SPI configure (clock properties).
@@ -404,7 +447,7 @@ class DAQ(threading.Thread):
         if not 0 <= cpol <= 1 or not 0 <= cpha <= 1:
             raise ValueError("Invalid spisw_config values")
 
-        self.send_command(mkcmd(26, 'BB', cpol, cpha), 'BB')
+        self.send_command(mkcmd(CMD.SPISW_CONFIG, 'BB', cpol, cpha), 'BB')
 
     def spi_setup(self, nbytes, sck=1, mosi=2, miso=3):
         """Bit-Bang SPI setup (PIO numbers to use).
@@ -420,7 +463,7 @@ class DAQ(threading.Thread):
         if not 1 <= sck <= 6 or not 1 <= mosi <= 6 or not 1 <= miso <= 6:
             raise ValueError("Invalid spisw_setup values")
 
-        self.send_command(mkcmd(28, 'BBB', sck, mosi, miso), 'BBB')
+        self.send_command(mkcmd(CMD.SPISW_SETUP, 'BBB', sck, mosi, miso), 'BBB')
 
     def spi_write(self, value, word=False):
         """Bit-bang SPI transfer (send+receive) a byte or a word.
@@ -433,9 +476,9 @@ class DAQ(threading.Thread):
             raise ValueError("Value out of range")
 
         if word:
-            ret = self.send_command(mkcmd(29, 'H', value), 'H')[0]
+            ret = self.send_command(mkcmd(CMD.SPISW_TRANSFER, 'H', value), 'H')[0]
         else:
-            ret = self.send_command(mkcmd(29, 'B', value), 'B')[0]
+            ret = self.send_command(mkcmd(CMD.SPISW_TRANSFER, 'B', value), 'B')[0]
         return ret
 
     def init_counter(self, edge):
@@ -444,14 +487,14 @@ class DAQ(threading.Thread):
 
         :param edge: high-to-low (False) or low-to-high (True).
         """
-        self.send_command(mkcmd(41, 'B', int(bool(edge))), 'B')[0]
+        self.send_command(mkcmd(CMD.COUNTER_INIT, 'B', int(bool(edge))), 'B')[0]
 
     def get_counter(self, reset):
         """Get the counter value.
 
         :param reset: reset the counter after perform reading (boolean).
         """
-        return self.send_command(mkcmd(42, 'B', int(bool(reset))), 'I')[0]
+        return self.send_command(mkcmd(CMD.GET_COUNTER, 'B', int(bool(reset))), 'I')[0]
 
     def init_capture(self, period):
         """Start Capture Mode around a given period.
@@ -462,11 +505,11 @@ class DAQ(threading.Thread):
         if not 0 <= period <= 2**32:
             raise ValueError("Period value out of range")
 
-        self.send_command(mkcmd(14, 'I', period), 'I')[0]
+        self.send_command(mkcmd(CMD.CAPTURE_INIT, 'I', period), 'I')[0]
 
     def stop_capture(self):
         """Stop Capture mode."""
-        self.send_command(mkcmd(15, ''), '')
+        self.send_command(mkcmd(CMD.CAPTURE_STOP, ''), '')
 
     def get_capture(self, mode):
         """Get Capture reading for the period length.
@@ -481,7 +524,7 @@ class DAQ(threading.Thread):
         if mode not in [0, 1, 2]:
             raise ValueError("mode value out of range")
 
-        return self.send_command(mkcmd(16, 'B', mode), 'BI')
+        return self.send_command(mkcmd(CMD.GET_CAPTURE, 'B', mode), 'BI')
 
     def init_encoder(self, resolution):
         """Start Encoder function.
@@ -492,18 +535,18 @@ class DAQ(threading.Thread):
         if not 0 <= resolution <= 2**32:
             raise ValueError("resolution value out of range")
 
-        self.send_command(mkcmd(50, 'I', resolution), 'I')[0]
+        self.send_command(mkcmd(CMD.ENCODER_INIT, 'I', resolution), 'I')[0]
 
     def get_encoder(self):
         """Get current encoder relative position.
 
         :returns: Position: The actual encoder value.
         """
-        return self.send_command(mkcmd(52, ''), 'I')[0]
+        return self.send_command(mkcmd(CMD.GET_ENCODER, ''), 'I')[0]
 
     def stop_encoder(self):
         """Stop encoder"""
-        self.send_command(mkcmd(51, ''), '')
+        self.send_command(mkcmd(CMD.ENCODER_STOP, ''), '')
 
     def init_pwm(self, duty, period):
         """Start PWM output with a given period and duty cycle.
@@ -519,11 +562,11 @@ class DAQ(threading.Thread):
         if not 0 <= period <= 65535:
             raise ValueError("period value out of range")
 
-        self.send_command(mkcmd(10, 'HH', duty, period), 'HH')
+        self.send_command(mkcmd(CMD.PWM_INIT, 'HH', duty, period), 'HH')
 
     def stop_pwm(self):
         """Stop PWM"""
-        self.send_command(mkcmd(11, ''), '')
+        self.send_command(mkcmd(CMD.PWM_STOP, ''), '')
 
     def __trigger_setup(self, number, mode, value):
         """Change the trigger mode of the DataChannel.
@@ -543,7 +586,7 @@ class DAQ(threading.Thread):
         if 1 <= mode <= 6 and value not in [0, 1]:
             raise ValueError("Invalid value of digital trigger")
 
-        self.send_command(mkcmd(33, 'BBH', number, mode, value), 'BBH')
+        self.send_command(mkcmd(CMD.TRIGGER_SETUP, 'BBH', number, mode, value), 'BBH')
 
     def trigger_mode(self, number):
         """Get the trigger mode of the DataChannel.
@@ -555,7 +598,7 @@ class DAQ(threading.Thread):
         if not 1 <= number <= MAX_CHANNELS:
             raise ValueError("Invalid DataChannel number")
 
-        mode = self.send_command(mkcmd(34, 'B', number), 'H')[0]
+        mode = self.send_command(mkcmd(CMD.GET_TRIGGER_MODE, 'B', number), 'H')[0]
         return Trigger(mode)
 
     def get_state_ch(self, number):
@@ -568,7 +611,7 @@ class DAQ(threading.Thread):
         if not 1 <= number <= MAX_CHANNELS:
             raise ValueError("Invalid DataChannel number")
 
-        return self.send_command(mkcmd(35, 'B', number), 'H')[0]
+        return self.send_command(mkcmd(CMD.GET_STATE_CHANNEL, 'B', number), 'H')[0]
 
     def __conf_channel(self, number, mode, pinput=1, ninput=0, gain=1,
                        nsamples=1):
@@ -590,14 +633,15 @@ class DAQ(threading.Thread):
         if not type(mode) is ExpMode:
             raise ValueError("Invalid mode")
 
-        self.__model.check_adc_settings(pinput, ninput, int(gain))
+        if mode == ExpMode.ANALOG_IN:
+            self.__model.check_adc_settings(pinput, ninput, int(gain))
 
         if not 0 <= nsamples < 256:
             raise ValueError("samples number out of range")
 
         return self.send_command(
-            mkcmd(22, 'BBBBBB', number, mode.value, pinput, ninput, int(gain),
-                  nsamples), 'BBBBBB')
+            mkcmd(CMD.CHANNEL_CFG, 'BBBBBB', number, mode.value, pinput,
+                  ninput, int(gain), nsamples), 'BBBBBB')
 
     def __setup_channel(self, number, npoints, continuous=False):
         """Configure the experiment's number of points.
@@ -616,7 +660,7 @@ class DAQ(threading.Thread):
         if not 0 <= npoints < 65536:
             raise ValueError("npoints out of range")
 
-        return self.send_command(mkcmd(32, 'BHb', number,
+        return self.send_command(mkcmd(CMD.CHANNEL_SETUP, 'BHb', number,
                                        npoints, int(not continuous)), 'BHB')
 
     def remove_experiment(self, experiment):
@@ -639,16 +683,17 @@ class DAQ(threading.Thread):
             self.__destroy_channel(i + 1)
             del(self.__exp[i])
 
-    def __dchanindex(self):
-        """Check which internal DataChannels are used or available.
+    def __used_channels(self):
+        """Returns a list of assigned DataChannels.
 
-        :returns:
-            - available: list of free DataChannels.
-            - used: list of asigned DataChannels.
+        :returns: list of assigned DataChannels.
         """
-        used = [e.number for e in self.__exp]
-        available = [i for i in range(1, 5) if i not in used]
-        return available, used
+        return [e.number for e in self.__exp]
+
+    def __first_available(self):
+        for i in range(1, MAX_CHANNELS + 1):
+            if i not in self.__used_channels():
+                return i
 
     def flush_channel(self, number):
         """Flush the channel.
@@ -659,7 +704,7 @@ class DAQ(threading.Thread):
         if not 1 <= number <= MAX_CHANNELS:
                 raise ValueError("Invalid DataChannel number")
 
-        self.send_command(mkcmd(45, 'B', number), 'B')
+        self.send_command(mkcmd(CMD.CHANNEL_FLUSH, 'B', number), 'B')
 
     def __destroy_channel(self, number):
         """Command firmware to clear a Datachannel structure.
@@ -671,7 +716,7 @@ class DAQ(threading.Thread):
         if not 1 <= number <= MAX_CHANNELS:
             raise ValueError("Invalid DataChannel number")
 
-        return self.send_command(mkcmd(57, 'B', number), 'B')[0]
+        return self.send_command(mkcmd(CMD.CHANNEL_DESTROY, 'B', number), 'B')[0]
 
     def create_stream(self, mode, *args, **kwargs):
         """Create Stream experiment.
@@ -685,8 +730,7 @@ class DAQ(threading.Thread):
         if index > 0 and self.__exp[0].__class__ is DAQBurst:
             raise LengthError("Device is configured for a Burst experiment")
 
-        available, _ = self.__dchanindex()
-        if len(available) == 0:
+        if len(self.__used_channels()) == MAX_CHANNELS:
             raise LengthError("Maximum value of experiments has been reached")
 
         if mode == ExpMode.ANALOG_OUT:
@@ -694,11 +738,11 @@ class DAQ(threading.Thread):
             for i in range(index):
                 if self.__exp[i].number == chan:
                     if type(self.__exp[i]) is DAQStream:
-                        self.__exp[i].number = available[0]
+                        self.__exp[i].number = self.__first_available()
                     else:
                         raise ValueError("DataChannel 4 is being used")
         else:
-            chan = available[0]
+            chan = self.__first_available()
 
         self.__exp.append(DAQStream(mode, chan, *args, **kwargs))
         return self.__exp[index]
@@ -715,7 +759,7 @@ class DAQ(threading.Thread):
         if not 1 <= period <= 65535:
             raise ValueError("Invalid period")
 
-        self.send_command(mkcmd(19, 'BH', number, period), 'BH')
+        self.send_command(mkcmd(CMD.STREAM_CREATE, 'BH', number, period), 'BH')
 
     def create_external(self, mode, clock_input, *args, **kwargs):
         """Create External experiment.
@@ -729,14 +773,13 @@ class DAQ(threading.Thread):
         if index > 0 and self.__exp[0].__class__ is DAQBurst:
             raise LengthError("Device is configured for a Burst experiment")
 
-        available, _ = self.__dchanindex()
-        if len(available) == 0:
+        if len(self.__used_channels()) == MAX_CHANNELS:
             raise LengthError("Maximum value of experiments has been reached")
 
         for i in range(index):
             if self.__exp[i].number == clock_input:
                 if type(self.__exp[i]) is DAQStream:
-                    self.__exp[i].number = available[0]
+                    self.__exp[i].number = self.__first_available()
                 else:
                     raise ValueError("Clock_input is being used by another experiment")
 
@@ -756,7 +799,7 @@ class DAQ(threading.Thread):
         if edge not in [0, 1]:
             raise ValueError("Invalid edge")
 
-        return self.send_command(mkcmd(20, 'BB', number, edge), 'BB')
+        return self.send_command(mkcmd(CMD.EXTERNAL_CREATE, 'BB', number, edge), 'BB')
 
     def create_burst(self, *args, **kwargs):
         """Create Burst experiment.
@@ -780,85 +823,59 @@ class DAQ(threading.Thread):
         if not 100 <= period <= 65535:
             raise ValueError("Invalid period")
 
-        return self.send_command(mkcmd(21, 'H', period), 'H')
+        return self.send_command(mkcmd(CMD.BURST_CREATE, 'H', period), 'H')
 
-    def __load_signal(self, pr_of, pr_data):
+    def __load_signal(self, data, offset=0):
         """Load an array of values in volts to preload DAC output.
 
         :raises: LengthError: Invalid dada length.
         """
-        if not 1 <= len(pr_data) <= 400:
+        if not 1 <= len(data) <= 400:
             raise LengthError("Invalid data length")
-        values = []
-        self.set_analog(pr_data[0])
-        for volts in pr_data:
-            raw = self.__model.volts_to_raw(volts, 0)
-            values.append(raw)
-        return self.send_command(mkcmd(23, 'h%dH' % len(values),
-                                       pr_of, *values), 'Bh')
+
+        self.set_analog(data[0])
+        values = [self.__model.volts_to_raw(v, 0) for v in data]
+        return self.send_command(mkcmd(CMD.SIGNAL_LOAD, 'h%dh' % len(values),
+                                       offset, *values), 'Bh')
 
     def flush(self):
         """Flush internal buffers."""
         self.ser.flushInput()
 
-    def __get_stream(self, data, channel):
-        """Low-level function for stream data collecting.
+    def __read_stream_packet(self):
+        packet = self.ser.read(5)
+        _, cmd, size, ch = struct.unpack('!HBBB', packet)
 
-        :param data: Buffer for data points.
-        :param channel: Buffer for assigned experiment number.
+        if cmd == CMD.STREAM_DATA:
+            body = escape_bytes(self.ser.read(size - 1), 0x7d)
+            if self.__debug:
+                print("STRM:", str2hex(packet), str2hex(body))
 
-        :returns:
-            - 0 if there is not any incoming data.
-            - 1 if data stream was processed.
-            - 2 if no data stream received.
+            data = struct.unpack('!%dh' % (size - 4)/2, body[3:])
+            return ch, data
+        elif cmd == CMD.STREAM_STOP:
+            if self.__debug:
+                print("STRM:", str2hex(packet))
+            return ch, None
+        else:
+            raise IOError("Invalid stream command: %d", cmd)
+
+    def __read_stream(self):
+        """Generator that reads and parses a stream packet at a time.
+
+        :returns: (data, channel)
+            - channel: Assigned experiment number.
+            - data: Buffer for data points.
         """
-        # TODO: refactor this method
-
-        self.header = []
-        self.data = []
-        ret = self.ser.read(1)
-        if not ret:
-            return 0
-        head = struct.unpack('!b', ret)
-        if head[0] != 0x7E:
-            data.append(head[0])
-            return 2
-        # Get header
-        while len(self.header) < 8:
-            ret = self.ser.read(1)
-            char = struct.unpack('!B', ret)
-            if char[0] == 0x7D:
-                ret = self.ser.read(1)
-                char = struct.unpack('!B', ret)
-                tmp = char[0] | 0x20
-                self.header.append(tmp)
-            else:
-                self.header.append(char[0])
-            if len(self.header) == 3 and self.header[2] == 80:
-                # openDAQ sent a stop command
-                ret = self.ser.read(2)
-                char, ch = struct.unpack('!BB', ret)
-                channel.append(ch - 1)
-                return 3
-        self.data_length = self.header[3] - 4
-        while len(self.data) < self.data_length:
-            ret = self.ser.read(1)
-            char = struct.unpack('!B', ret)
-            if char[0] == 0x7D:
-                ret = self.ser.read(1)
-                char = struct.unpack('!B', ret)
-                tmp = char[0] | 0x20
-                self.data.append(tmp)
-            else:
-                self.data.append(char[0])
-        for i in range(0, self.data_length, 2):
-            value = (self.data[i] << 8) | self.data[i + 1]
-            if value >= 32768:
-                value -= 65536
-            data.append(int(value))
-            channel.append(self.header[4] - 1)
-        check_stream_crc(self.header, self.data)
-        return 1
+        while True:
+            # wait for a start byte
+            while self.ser.read(1) != chr(0x7e):
+                pass
+            # read a packet
+            try:
+                yield self.__read_stream_packet()
+            except EOFError:
+                break
 
     @property
     def is_measuring(self):
@@ -867,92 +884,61 @@ class DAQ(threading.Thread):
 
     def start(self):
         """Start all available experiments."""
+        if self.__thread and self.__thread.isAlive():
+            return
+
+        # setup the openDAQ
         for s in self.__exp:
             if s.__class__ is DAQBurst:
                 self.__create_burst(s.period)
             elif s.__class__ is DAQStream:
                 self.__create_stream(s.number, s.period)
-            else:  # External
+            else:
                 self.__create_external(s.number, s.edge)
+
             self.__setup_channel(s.number, s.npoints, s.continuous)
             self.__conf_channel(s.number, s.mode, s.pinput,
                                 s.ninput, s.gain, s.nsamples)
             self.__trigger_setup(s.number, s.trg_mode, s.trg_value)
 
-            if (s.get_mode() == ExpMode.ANALOG_OUT):
-                pr_data, pr_offset = s.get_preload_data()
-                for i in range(len(pr_offset)):
-                    self.__load_signal(pr_offset[i], pr_data[i])
+            if s.get_mode() == ExpMode.ANALOG_OUT:
+                self.__load_signal(*s.get_preload_data())
                 break
 
-        self.send_command(mkcmd(64, ''), '')
-
-        if not self.__running:
-            threading.Thread.start(self)
-
-        self.__running = True
         self.__measuring = True
+        self.send_command(mkcmd(CMD.STREAM_START, ''), '')
+        self.__thread = Thread(target=self.__run)
+        self.__thread.daemon = True
+        self.__thread.start()
 
-    def stop(self):
+    def stop(self, clear=False):
         """Stop all running experiments and exit threads.
 
-        It clears the experiment list. The experiments will no longer be
-        available. Call it just before quitting program!
+        :param clear: If True, the experiment list will be cleared. The
+        experiments will no longer be available.
         """
-        self.__measuring = False
-        self.__running = False
-        self.__stopping = True
-        while True:
-            try:
-                self.send_command(mkcmd(80, ''), '')
+        if self.__thread and self.__thread.isAlive():
+            self.send_command(mkcmd(CMD.STREAM_STOP, ''))
+            self.__thread.join() # wait for thread to finish
+
+            if clear:
                 self.clear_experiments()
-                break
-            except CRCError:
-                time.sleep(0.2)
-                self.flush()
 
-    def halt(self, clear=False):
-        """Stop running experiments but keep threads active to start new
-        experiments.
-
-        :param clear: Clear experiment list.
-        """
-        self.__measuring = False
-        while True:
-            try:
-                self.send_command(mkcmd(80, ''), '')
-                time.sleep(1)
-                break
-            except CRCError:
-                time.sleep(0.2)
-                self.flush()
-        if clear:
-            self.clear_experiments()
-
-    def run(self):
+    def __run(self):
         """Thread loop.
 
         Store the experiment data sent by the device after calling start().
         """
-        while True:
-            while self.__running:
-                if self.__measuring:
-                    data = []
-                    channel = []
-                    result = self.__get_stream(data, channel)
-                    if result == 1:
-                        # data available
-                        available, used = self.__dchanindex()
-                        for i in range(len(channel)):
-                            exp = self.__exp[used.index(channel[i] + 1)]
-                            gain_id, pinput, ninput, _ = exp.get_parameters()
-                            exp.add_point(self.__model.raw_to_volts(
-                                data[i], gain_id, pinput, ninput))
+        used = self.__used_channels()
+        stopped = 0
 
-                    elif result == 3:
-                        self.halt()
-                else:
-                    time.sleep(0.2)
+        for ch, data in self.__read_stream():
+            if data is None:
+                stopped += 1
+                if stopped == len(used):
+                    break
+            else:
+                exp = self.__exp[used.index(ch)]
+                exp.add_points(self.__model.raw_to_volts(data, *exp.get_params()))
 
-            if self.__stopping:
-                break
+        self.__measuring = False

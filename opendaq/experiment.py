@@ -57,6 +57,8 @@ class DAQExperiment(object):
         self.ninput = ninput
         self.gain = gain
         self.nsamples = nsamples
+        self.signal_data = []
+        self.signal_offs = 0
 
     def trigger_setup(self, mode=Trigger.SW, value=0):
         """Channge the trigger mode of datachannel.
@@ -75,9 +77,9 @@ class DAQExperiment(object):
         self.trg_mode = mode
         self.trg_value = value
 
-    def get_parameters(self):
+    def get_params(self):
         """Return gain, pinput and ninput."""
-        return self.gain, self.pinput, self.ninput, self.number
+        return self.gain, self.pinput, self.ninput
 
     def get_mode(self):
         """Return mode."""
@@ -85,23 +87,19 @@ class DAQExperiment(object):
 
     def get_preload_data(self):
         """Return preload_data and preload_offset. """
-        return self.preload_data, self.preload_offset
+        return self.signal_data, self.signal_offs
 
-    def load_signal(self, data, offset=0, clear=False):
+    def load_signal(self, data, offset=0):
         if not 1 <= len(data) <= 400:
             raise ValueError('Invalid data length')
 
-        if clear:
-            self.preload_data = []
-            self.preload_offset = []
+        self.signal_data = data
+        self.signal_offs = offset
 
-        self.preload_data.append(data)
-        self.preload_offset.append(offset)
-
-    def add_point(self, point):
+    def add_points(self, points):
         """Write a single point into the ring buffer."""
         self.mutex_ring_buffer.acquire()
-        self.ring_buffer.append(point)
+        self.ring_buffer.extend(points)
         self.mutex_ring_buffer.release()
 
     def read(self):
