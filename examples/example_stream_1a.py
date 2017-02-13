@@ -6,7 +6,7 @@ from opendaq import DAQ, ExpMode, Gains
 
 # Connect to the device
 # Change here the serial port in which the openDAQ is connected
-daq = DAQ('/dev/ttyUSB0')
+daq = DAQ("COM3")
 
 # Set Analog voltage
 daq.set_analog(0.9)
@@ -26,3 +26,5 @@ print("data1", stream1.read())
 print("data2", stream2.read())
 
 daq.stop()
+
+daq.close()

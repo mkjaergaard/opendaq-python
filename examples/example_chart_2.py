@@ -2,16 +2,16 @@
 
 import time
 import matplotlib.pyplot as plt
-from opendaq.daq import DAQ, ANALOG_INPUT, Gains
+from opendaq import DAQ, ExpMode, Gains
 
 # Change to the serial port in wich openDAQ is actually connected
-daq = DAQ('/dev/ttyUSB0')
+daq = DAQ('COM3')
 
 daq.set_analog(1)    # set a fix voltage
 
 # Configure the experiment
 data_rate = 200
-stream = daq.create_stream(ANALOG_INPUT, data_rate, continuous=True)
+stream = daq.create_stream(ExpMode.ANALOG_IN, data_rate, continuous=True)
 stream.analog_setup(pinput=8, gain=Gains.S.x1)
 
 # Initiate lists and variables
@@ -27,7 +27,7 @@ plt.show()
 # start the experiment
 daq.start()
 
-while daq.is_measuring():
+while daq.is_measuring:
     try:
         time.sleep(1)
         a = stream.read()

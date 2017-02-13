@@ -3,19 +3,19 @@ and use another experiment to generate the signal"""
 
 import time
 import matplotlib.pyplot as plt
-from opendaq.daq import DAQ, ANALOG_INPUT, ANALOG_OUTPUT, GAIN_S_X1
+from opendaq import DAQ, ExpMode, Gains
 
 # Change to the serial port in wich openDAQ is actually connected
-dq = DAQ('/dev/ttyUSB0')
+dq = DAQ('COM3')
 
 # Configure the first experiment, the one that will be plotted
 data_rate = 20
-stream1 = dq.create_stream(ANALOG_INPUT, data_rate, continuous=True)
-stream1.analog_setup(pinput=8, gain=GAIN_S_X1)
+stream1 = dq.create_stream(ExpMode.ANALOG_IN, data_rate, continuous=True)
+stream1.analog_setup(pinput=8, gain=Gains.S.x1)
 
 # Configure the second experiment, a custom signal generated from a stream
 preload_buffer = [-2.5, -1, 0, 1, 2.5]
-stream2 = dq.create_stream(ANALOG_OUTPUT, period=500,
+stream2 = dq.create_stream(ExpMode.ANALOG_OUT, period=500,
                            npoints=len(preload_buffer), continuous=True)
 stream2.load_signal(preload_buffer, clear=True)
 
