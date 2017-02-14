@@ -70,7 +70,7 @@ class DAQModel(object):
         self.adc_calib = [CalibReg(1., 0.)]*adc_slots
         self.dac_calib = [CalibReg(1., 0.)]*dac_slots
 
-        if self.fw_ver < 130:
+        if self.fw_ver < 131:
             raise ValueError('Invalid firmware version. Please upgrade it!')
 
     @property

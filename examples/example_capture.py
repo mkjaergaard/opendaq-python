@@ -4,7 +4,7 @@ import time
 
 # Connect to the device
 # change for the Serial port in which openDAQ is connected
-daq = DAQ('/dev/ttyUSB0')
+daq = DAQ('COM3')
 
 daq.init_capture(12500)
 

@@ -2,9 +2,9 @@
 
 Python binding for openDAQ hardware.
 
-openDAQ libraries and examples are compatible with Python 2.7 and 3.X
+openDAQ libraries and examples are compatible with Python 2.7 and 3.X.
 
-See usage.rst for additional support.
+Go to [openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough") in ReadTheDocs for complete documentation of the library.
 
 * * *
 
@@ -26,7 +26,7 @@ For support, e-mail to support@open-daq.com
 
 You will need **administrator rights** (root access) to install this package system-wide.
 
-Use the console and go to the folder where you downloaded the opendaq-python package.:
+Use the console and go to the folder where you downloaded the opendaq-python package:
 
 ```sh
     $ python setup.py install
@@ -34,7 +34,7 @@ Use the console and go to the folder where you downloaded the opendaq-python pac
 
 To start measuring, just import the module and connect to the device::
 
-```python
+```sh
     $ from opendaq import DAQ 	#import the module
     $ daq = DAQ("COM2")	#assign a name to the device instance (daq)
 ```
@@ -59,20 +59,20 @@ It is also possible to install the package using **pip**::
 You can control the LED turning it off, green, red or orange:
 
 ```python
-    $ daq.set_led(LedColor.RED)
+    daq.set_led(LedColor.RED)
 ```
 
 Set an output voltage (CR Mode):
 
 ```python
-    $ daq.set_analog(0.91)
+    daq.set_analog(0.91)
 ```
 
 Configure an analog input and read the voltage:
 
 ```python
-    $ daq.conf_adc(pinput=8, ninput=0, gain=Gains.M.x1)
-    $ daq.read_analog()
+    daq.conf_adc(pinput=8, ninput=0, gain=Gains.M.x1)
+    daq.read_analog()
 ```
 
 ### Stream Mode:
@@ -82,19 +82,19 @@ mode, 30 total points. Then, configure that experiment to read from A8 as SE inp
 
 
 ```python
-    $ stream_exp = daq.create_stream(ExpMode.ANALOG_IN, 100, 30, continuous=False)
-    $ stream_exp.analog_setup(pinput=8, gain=Gains.M.x1)
+    stream_exp = daq.create_stream(ExpMode.ANALOG_IN, 100, 30, continuous=False)
+    stream_exp.analog_setup(pinput=8, gain=Gains.M.x1)
 ```
 
 Start the experiment and keep receiving measured data until it has ended reading all the points:
 
 ```python
-    $ daq.start()
-    $ while daq.is_measuring:
-    $ 		print "data=", stream_exp.read()
+    daq.start()
+    while daq.is_measuring:
+    	print "data=", stream_exp.read()
 ```
 
-**See usage.rst to read complete documentation about the library.**
+**Go to [openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough") in ReadTheDocs to read more information about the library.**
 
 There are some basic example scripts included in this repository (see */examples* folder) to help you 
 understanding the syntaxis.

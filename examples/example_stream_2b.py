@@ -21,8 +21,8 @@ daq.start()
 
 for i in range(4):
     time.sleep(1)
-    print("data1", stream1.read())
-    print("data2", stream2.read())
+    print("data1: ", stream1.read())
+    print("data2: ", stream2.read())
 
 daq.stop()
 
@@ -33,8 +33,8 @@ daq.start()
 
 for i in range(4):
     time.sleep(1)
-    print("data1", stream1.read())
-    print("data2", stream2.read())
+    print("data1: ", stream1.read())
+    print("data2: ", stream2.read())
 
 daq.stop()
 daq.close()

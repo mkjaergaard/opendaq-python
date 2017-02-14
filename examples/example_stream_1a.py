@@ -28,5 +28,5 @@ data2 = stream2.read()
 daq.stop()
 daq.close()
 
-print(data1)
-print(data2)
+print("data1:", data1)
+print("data2:", data2)

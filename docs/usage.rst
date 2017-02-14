@@ -522,7 +522,7 @@ Duty is the high time of the signal ([0:1023]). If 0, the signal is always low. 
   daq.stop_pwm()
 
 
-PIO COnfiguration and control (CR mode)
+PIO Configuration and control (CR mode)
 ==============================================
 
 The openDAQ has 6 DIO (digital Inputs/Outputs). We have 4 DIO lines on the right side screw terminal block (D1-D4), and the two others on the left terminal block (D5-D6).
@@ -669,6 +669,13 @@ Calibration
 
 **IMPORTANT NOTE**: The functions used for openDAQ calibration have been redesigned completely from firmware version 1.4.0 and python library version 0.3
 
+Use the tool **opendaq-utils**, which is installed with the rest of the scripts, for device calibrating and updating.
+
+ .. code::
+    opendaq-utils [-h] [-p PORT] [-m METER] (info, calib, serial, test, set-voltage)
+
+Theory of operation
+-------------------
 AIN and DAC commands are transmitted between the host PC and the device in raw binary using the full 16-bit range of the binary transmissions. For example, raw code -32768
 correspond in the ADC readings of the openDAQ [M] to -4.096V, while it is equivalent to -12.0V for the openDAQ [S]. Maximum ADC raw values range up to 32767, which is equivalent
 to 4.095V in openDAQ [M] and to 12.0V in openDAQ[S].

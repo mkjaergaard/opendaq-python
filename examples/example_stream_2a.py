@@ -21,8 +21,8 @@ daq.start()
 
 while daq.is_measuring:
     time.sleep(1)
-    print("data1", stream1.read())
-    print("data2", stream2.read())
+    print("data1: ", stream1.read())
+    print("data2: ", stream2.read())
 
 print("start Again!")
 
@@ -30,9 +30,8 @@ daq.start()
 
 while daq.is_measuring:
     time.sleep(1)
-    print("data1", stream1.read())
-    print("data2", stream2.read())
-
+    print("data1: ", stream1.read())
+    print("data2: ", stream2.read())
 daq.stop()
 
 daq.close()

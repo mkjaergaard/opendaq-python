@@ -185,7 +185,7 @@ class CalibDAQ(DAQ):
             logging.info("%d --> %0.4f (%d)" % (ch, value, self.read_adc()))
 
         if self.hw_ver == "[M]":
-            # TODO: Not considering pga X100 because it caused a crash
+            self.set_adc_calib(calib)
             for i, pga in enumerate(self.pga_gains[1:]):
                 volts = 1./pga
                 self.set_analog(volts)
