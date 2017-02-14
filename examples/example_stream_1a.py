@@ -12,10 +12,10 @@ daq = DAQ("COM3")
 daq.set_analog(0.9)
 
 stream1 = daq.create_stream(ExpMode.ANALOG_IN, 1, 10, continuous=False)
-stream1.analog_setup(pinput=8, gain=Gains.S.x1)
+stream1.analog_setup(pinput=8, gain=Gains.M.x1)
 
-stream2 = daq.create_stream(ExpMode.ANALOG_IN, 1, 100, continuous=False)
-stream2.analog_setup(pinput=7, ninput=8, gain=Gains.S.x1)
+stream2 = daq.create_stream(ExpMode.ANALOG_IN, 1, 20, continuous=False)
+stream2.analog_setup(pinput=7, ninput=8, gain=Gains.M.x1)
 
 daq.start()
 

@@ -100,12 +100,12 @@ def parse_command(data, fmt, length):
     return data[2:]
 
 
-def escape_bytes(data, escape_code):
+def escape_bytes(data, escape_codes):
     newdata = []
     escape = False
 
     for b in data:
-        if b == escape_code:
+        if ord(b) in escape_codes:
             escape = True
         elif escape:
             newdata.append(ord(b) ^ 0x20)

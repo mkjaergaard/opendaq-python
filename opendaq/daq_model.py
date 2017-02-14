@@ -172,9 +172,9 @@ class DAQModel(object):
         offset = offs1 + offs2*pga_gain
 
         try:
-            return [(v - offset)/gain for v in raw]
+            return [round((v - offset)/gain, 5) for v in raw]
         except TypeError:
-            return (raw - offset)/gain
+            return round((raw - offset)/gain, 5)
 
     def __check_dac_value(self, volts):
         if not (self.dac.vmin <= volts <= self.dac.vmax):

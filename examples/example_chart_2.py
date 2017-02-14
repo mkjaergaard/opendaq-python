@@ -41,5 +41,5 @@ while daq.is_measuring:
         plt.close()
         # stop the experiment
         daq.stop()
-        dq.close()
+        daq.close()
         break

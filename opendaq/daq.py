@@ -302,7 +302,7 @@ class DAQ(object):
 
         :returns: Raw ADC value.
         """
-        return self.send_command(mkcmd(CMD.GET, ''), 'h')[0]
+        return self.send_command(mkcmd(CMD.AIN, ''), 'h')[0]
 
     def read_analog(self):
         """Read data from ADC in volts.
@@ -847,11 +847,13 @@ class DAQ(object):
         _, cmd, size, ch = struct.unpack('!HBBB', packet)
 
         if cmd == CMD.STREAM_DATA:
-            body = escape_bytes(self.ser.read(size - 1), 0x7d)
+            body = escape_bytes(self.ser.read(size - 1), (0x7d, 0x7e))
+
             if self.__debug:
                 print("STRM:", str2hex(packet), str2hex(body))
+                print(str2hex(body))
 
-            data = struct.unpack('!%dh' % (size - 4)/2, body[3:])
+            data = struct.unpack('!%dh' % ((size - 4)/2), body[3:])
             return ch, data
         elif cmd == CMD.STREAM_STOP:
             if self.__debug:

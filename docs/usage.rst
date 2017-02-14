@@ -38,8 +38,8 @@ You should see something like this:
 In this example, openDAQ is attached to the USB port named ttyUSB0.
 
 If you are working in Windows, the name of the port will be something like `COMxx`
-instead of `/dev/ttyUSBxx`. You can check the port in Control
-Panel->System->Device Manager.
+instead of `/dev/ttyUSBxx`. You can check the port in *Control
+Panel->System->Device Manager*.
 
 Now, with the object *daq* created, we can start working with it. If you want to
 close the port, simply type the following:
@@ -70,12 +70,16 @@ pinput           Positive input          1:8             AN1-AN8
 
 ninput           Negative input          M:0,5,6,7,8,25  0: ref ground
 
-                                         S: 0, 1:8       25: ref 2,5 V ; rest: input pins
+                                         S: 0, 1:8       25: ref 2,5 V
+
+                                         N: 0, 1:8       rest: input pins
 
 
 gain             Analog gain             M: 0:4          x1/3,x1,x2,x10,x100
 
-                                         S: 0:7          x1,x2,x4,x5,x8,x10,x20
+                                         S: 0:7          x1,x2,x4,x5,x8,x10,x16, x20
+
+                                         N: 0:7          x1,x2,x4,x5,x8,x10,x16, x32
 
 nsamples         Number of samples per   [0-254]
                  data point
@@ -135,6 +139,8 @@ openDAQ[M]        [-4.096V  4.096V]
 
 openDAQ[S]        [0V 4.096V]
 
+openDAQ[N]        [-4.096V  4.096V]
+
 ===========     =======================
 
 
@@ -192,7 +198,7 @@ To create an Stream Experiment use the following function:
 
  .. code:: python
 
-  stream_exp = daq.create_stream(mode,period,npoints,continuous,buffersize)
+  daq.stream_exp = daq.create_stream(ExpMode.ANALOG_IN, 100, 30, continuous=False)
 
 with parameters:
 
@@ -200,12 +206,18 @@ with parameters:
 ===========     ======================= =============== =====================
 Parameter            Description             Value       Notes
 ===========     ======================= =============== =====================
-mode              Define data source        0:5           0:ANALOG_INPUT
-                  or destination                          1:ANALOG_OUTPUT
-                                                          2:DIGITAL_INPUT
-                                                          3:DIGITAL_OUTPUT
-                                                          4:COUNTER_INPUT
-                                                          5:CAPTURE_INPUT
+ExpMode           Define data source        0:5           0:ANALOG_IN
+                  or destination                          
+                                                          1:ANALOG_OUT
+                                                          
+                                                          2:DIGITAL_IN
+                                                          
+                                                          3:DIGITAL_OUT
+                                                          
+                                                          4:COUNTER_IN
+                                                          
+                                                          5:CAPTURE_IN
+                                                          
 period            Period of the stream      1:65536
                   experiment
 
@@ -217,8 +229,6 @@ continuous        Indicates if           True or False   False:run once (By defa
                   experiment is
                   continuous
 
-buffersize        Buffer size                           By default 1000 (optional)
-
 ===========     ======================= =============== =====================
 
 
@@ -226,13 +236,13 @@ Once created the experiment we can configure the input to read. For example, if 
 
  .. code:: python
 
-  stream_exp = daq.create_stream(ANALOG_INPUT,200,continuous=False)
+  stream_exp = daq.create_stream(ExpMode.ANALOG_IN, 200, continuous=True)
 
 Now, we have to configure the channel. To do this we use the method *analog_setup* of the class *DAQStream*:
 
  .. code:: python
 
-  stream_exp.analog_setup(pinput,ninput,gain,nsamples)
+  stream_exp.analog_setup(pinput=8, ninput=0, gain=Gains.M.x1)
 
 with parameters:
 
@@ -242,13 +252,18 @@ Parameter            Description             Value            Notes
 pinput             Positive/SE analog         1:8
                    input
 
-ninput             Select negative        M:0,5,6,7,8,25
-                   analog input           S:0,1:8
+ninput           Negative input          M:0,5,6,7,8,25  0: ref ground
 
-  gain           Select PGA multiplier  M: 0:4             x1/2,x1,x2,x10,x100
-                                                           x1,x2,x3,x4,
-                                        S: 0:7             x8,x10,x16,
-                                                           x20
+                                         S: 0, 1:8       25: ref 2,5 V
+
+                                         N: 0, 1:8       rest: input pins
+
+gain             Analog gain             M: 0:4          x1/3,x1,x2,x10,x100
+
+                                         S: 0:7          x1,x2,x4,x5,x8,x10,x16, x20
+
+                                         N: 0:7          x1,x2,x4,x5,x8,x10,x16, x32
+
 nsamples         Number of samples to    0:255
                  calculate the mean
                  for each point
@@ -297,13 +312,13 @@ For example, we are going to create an external experiment with an analog readin
 
  .. code:: python
 
-  extern_exp = daq.create_external(ANALOG_INPUT,1,edge=1,npoints=10,continuous=False,buffersize=1000)
+  extern_exp = daq.create_external(ExpMode.ANALOG_IN, 1, edge=1, npoints=10, continuous=False)
 
 As with the stream experiment, now we have to setup the analog input:
 
  .. code:: python
 
-  stream_exp.analog_setup(pinput=8,gain=GAIN_S_X1,nsamples=20)
+  stream_exp.analog_setup(pinput=8, ninput=0, gain=Gains.M.x1)
 
   daq.start()
 
@@ -311,7 +326,7 @@ We can use a while loop in this way:
 
  .. code:: python
 
-  while daq.is_measuring():
+  while daq.is_measuring:
       print "data", extern_exp.read()
 
 
@@ -329,14 +344,14 @@ To create a burst experiment use the following function:
 
  .. code:: python
 
-  burst_exp = daq.create_burst(mode,period,npoints,continuous)
+  burst_exp = daq.create_burst(mode, period, npoints, continuous)
 
 Here is an example of a how a burst experiment is configured to do a analog output streaming:
 
  .. code:: python
 
   preload_buffer = [0.3, 1, 3.3, 2]
-  burst_source = daq.create_burst(mode=ANALOG_OUTPUT, period=200, npoints=len(preload_buffer), continous=False)
+  burst_source = daq.create_burst(ExpMode.ANALOG_IN, period=200, npoints=len(preload_buffer), continous=False)
   burst_source.analog_setup()
   burst_source.load_signal(preload_buffer)
 
@@ -681,14 +696,11 @@ The functions that manage the DAC calibration are:
 
 .. code:: python
 
-    daq.set_dac_cal(dac_corr,dac_offset)
-    daq.get_dac_cal()
+    daq.set_dac_calib(*list of CalibReg registers*)
+    daq.get_dac_calib()
 
-These methods set and read the device DAC calibration, where *dac_corr* and *dac_offsets* are are lists of values for each DAC channel (thus, they only have one element each).
+These methods set and read the device DAC calibration, where *CalibReg* are pairs of slope and offset coefficients (*[dac_corr, dac_offset]*).
 The values are the coefficients of the line that corrects the deviation between the ideal values and the actual values that the device outputs when it applies no calibration.
-
-- *dac_corr* is the slope of the line, which should be the relationship between the actual values (e.g. 1.02V) divided by the theorical desired values (e.g. 1.00)
-- *dac_offset* is the zero crossing of the line, or the actual value for a 0V command
 
 In the case of the of the DAC output the mathematical function between the theorical value and the raw binary code is exactly the same:
 
@@ -708,20 +720,19 @@ The functions that manage the DAC calibration are:
 
 .. code:: python
 
-    daq.set_adc_cal(adc_corrs,adc_offsets,flag)
-    daq.get_adc_cal()
+    daq.get_adc_calib(*list of CalibReg registers*)
+    daq.get_adc_calib()
 
-Where as in the case of the DAC calibration, *adc_corrs* and *adc_offsets* are the lists of values of the parameters for each calibration line.
+Where as in the case of the DAC calibration, *CalibReg* are pairs of slope and offset coefficients (*[adc_corr, adc_offset]*).
 
-- *adc_corrs* are the slopes of the calibration lines, the read value divided by the real voltage value at the input.
-- *adc_offsets* is the zero crossing of the line, in this case the raw ADC value for a 0V input (in this case, it is not a voltage but a raw binary code).
-- *flag*: in the case of the openDAQ[S], allows loading the calibration for the inputs in SE mode, DE mode or both ('ALL').
+- *adc_corr* is the slope of the calibration lines, the read value divided by the real voltage value at the input.
+- *adc_offset* is the zero crossing of the line, in this case the raw ADC value for a 0V input (in this case, it is not a voltage but a raw binary code).
 
 In the case of the ADC, several facts have to be taken into consideration:
 
 - Each analog input will have a different calibration line
 - In the case of openDAQ [M] each gain setting must be calibrated separately, as the gains are set by resistor values with a relatively high tolerance. This is not the case of the
-openDAQ [S], which uses a PGA with factory default calibration for all ranges.
+openDAQ [S] and [N], which use a PGA with factory calibration for all ranges.
 - The inputs of the openDAQ [S] have a different calibration if they are used as single ended (SE) or differential (DE). In the case of openDAQ [M] the calibration can be the same for
 both modes, because the inputs are just multiplexed.
 
@@ -729,16 +740,18 @@ All of this translates into the following:
 
 - openDAQ [M] has a total of 13 ADC calibration slots, 8 for each analog input, and 5 for each gain setting.
 - openDAQ [S] has 16 ADC calibration slots, 8 for each analog input in SE mode, and 8 for each input in DE mode.
+- openDAQ [N] has 16 ADC calibration slots, 8 for each analog input in SE mode, and 8 for each input in DE mode.
 
 The mathematical function between the raw code given by the device and the real analog value is given by an equation depending on the device model (check file *model.py*):
 
 .. math::
     volts = raw / (adc_base_gain * gain_ampli)
 
-Where *adc_base_gain* is the relationship between binary codes and volts at *gain=1* and *gain_ampli* the actual gain amplification being used.
+Where *adc_base_gain* is the relationship between binary codes and volts at *gain 1x*, and *gain_ampli* the actual gain amplification being used.
 
 Applying calibration to the equation above:
 
 .. math::
     volts = (raw - adc_offset1 - (adc_offset2*gain_ampli) ) / (adc_corr1 * adc_corr2 * adc_base_gain * gain_ampli)
+    
 
