@@ -4,9 +4,9 @@ Main project files.
 
 Go to [openDAQ documentation](https://www.google.com "DAQ.py walkthrough") in ReadTheDocs to take a look at the functions included in them.
 
+* * * 
 
-
-## Using opendaq-utils script for device calibration
+## Using opendaq-utils script for calibrating openDAQ devices
 
 This script provides useful tools for device testing and analog calibration.
 
@@ -48,7 +48,14 @@ Subcomands:
     -w SERIAL, --write SERIAL   Write a new serial number
     
 ```
+* * * 
 
-Please note that for calibrating the device, you will need a external multimeter. 
-All the analog inputs will be calibrated, as well as the analog output (DAC). 
-It will be necessary to connect all of them in between (tied one to each other) to execute the calibration and test scripts.
+Please note that for calibrating the device, you should follow these instructions:
+
+1. You will need an external multimeter or any instrument capable of reading voltages. 
+2. All the analog inputs will be calibrated, as well as the analog output (DAC). The easiest way is to connect all of them in between (all the AIN and the DAC together).
+3. Reset the old calibration: `opendaq-utils calib -r`.
+4. Apply some different output voltages ( `opendaq-utils set-voltage -i`) and anotate them in a file (`\calib.txt`). They will be used for DAC calibration.
+5. Execute full calibration script: `opendaq-utils calib -l`. Using the values from the file, and if the DAC output is correctly connected to all the inputs, the system will calibrate itself.
+6. You can execute a test to check the accuracy of the new calibration: `opendaq-utils test -l`
+

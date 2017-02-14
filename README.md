@@ -4,7 +4,7 @@ Python binding for openDAQ hardware.
 
 openDAQ libraries and examples are compatible with Python 2.7 and 3.X.
 
-Go to [openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough") in ReadTheDocs for complete documentation of the library.
+Go to [openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough") in *ReadTheDocs* for complete documentation of the library.
 
 * * *
 
@@ -26,17 +26,23 @@ For support, e-mail to support@open-daq.com
 
 You will need **administrator rights** (root access) to install this package system-wide.
 
-Use the console and go to the folder where you downloaded the opendaq-python package:
+It is possible to install the package using **pip**:
+
+```sh
+    $ pip install opendaq
+```
+
+If you dont have pip, then use the console and go to the folder where you downloaded the opendaq-python package:
 
 ```sh
     $ python setup.py install
 ```
 
-To start measuring, just import the module and connect to the device::
+To start measuring, just import the module and connect to the device:
 
 ```sh
-    $ from opendaq import DAQ 	#import the module
-    $ daq = DAQ("COM2")	#assign a name to the device instance (daq)
+    $ from opendaq import DAQ, ExpMode, Gains, LedColor 	#import the module and definitions
+    $ daq = DAQ("COM2")	# assign a name to the device instance (daq) and connect to serial port
 ```
 
 Note that the exact name of the port may be different on your computer. 
@@ -45,12 +51,6 @@ In Windows, you can go to *System/Device Manager*, in the *Control Panel*, to ch
 
 The name of the port could be something like `/dev/ttyUSB0` in Linux or `/dev/tty.SLAB_USBtoUART` in Mac. Ports are listed in `/dev/` directory at both OS.
 
-
-It is also possible to install the package using **pip**::
-
-```sh
-    $ pip install opendaq
-```
     
 ## Quick start    
 
@@ -94,7 +94,7 @@ Start the experiment and keep receiving measured data until it has ended reading
     	print "data=", stream_exp.read()
 ```
 
-**Go to [openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough") in ReadTheDocs to read more information about the library.**
+Go to **[openDAQ documentation](http://opendaq-python.readthedocs.io/en/latest/ "DAQ.py walkthrough")** in *ReadTheDocs* to read more information about the library.
 
 There are some basic example scripts included in this repository (see */examples* folder) to help you 
 understanding the syntaxis.
@@ -103,11 +103,11 @@ understanding the syntaxis.
 ## Development
 
 You will need some additional development tools if you want to collaborate with this project.
-They can be installed at once using pip::
+They can be installed at once using pip:
 ```sh
     $ pip install -r requirements-dev.txt
 ```
-You can also install the package in `development` mode::
+You can also install the package in `development` mode:
 ```sh
     $ python setup.py develop
 ```
